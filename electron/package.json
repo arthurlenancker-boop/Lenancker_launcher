@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "Lenancker Launcher — packaging Windows (.exe) via Electron + electron-builder. Le site web statique est embarqué tel quel.",
+  "author": "Arthur Lenancker <arthurlenancker-boop@users.noreply.github.com>",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

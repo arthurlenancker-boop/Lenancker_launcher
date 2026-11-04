@@ -58,6 +58,14 @@ npm install
 npm run dist:win            # installateur NSIS + version portable dans ../dist/
 ```
 
+> Note Windows : electron-builder télécharge `winCodeSign` (rcedit/signtool) et
+> l'extrait avec des liens symboliques, ce qui exige le **Mode Développeur**
+> (Paramètres > Confidentialité et sécurité > Pour les développeurs). Sans ce
+> mode, pré-extraire `winCodeSign-2.6.0.7z` (hors dossier `darwin`) dans
+> `%LOCALAPPDATA%\electron-builder\Cache\winCodeSign\winCodeSign-2.6.0\`.
+> Résultat du build : `dist/Lenancker Launcher Setup 1.0.0.exe` (NSIS) et
+> `dist/Lenancker Launcher 1.0.0.exe` (portable).
+
 ## Déploiement (GitHub Pages)
 
 À chaque push sur `main`, le workflow `.github/workflows/deploy.yml` publie le
