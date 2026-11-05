@@ -12,6 +12,7 @@ const CORE = [
   'assets/js/launcher.js',
   'assets/vendor/marked.min.js',
   'assets/vendor/dompurify.min.js',
+  'assets/vendor/docx.min.js',
   'assets/fonts/inter-400.woff2',
   'assets/fonts/inter-500.woff2',
   'assets/fonts/inter-600.woff2',
@@ -27,6 +28,7 @@ const CORE = [
   'apps/ocr/index.html',
   'apps/ocr/ocr.css',
   'apps/ocr/ocr.js',
+  'apps/ocr/md2docx.js',
 ];
 
 self.addEventListener('install', (event) => {

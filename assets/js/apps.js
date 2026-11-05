@@ -4,7 +4,7 @@ window.LENANCKER_APPS = [
   {
     slug: 'ocr',
     name: 'OCR Mistral',
-    desc: "Extrais le texte de tes images et PDF (cours, scans, fiches) en Markdown, via l'API Mistral OCR.",
+    desc: "Extrais le texte de tes images et PDF (cours, scans, fiches) via l'API Mistral OCR : Markdown copiable, export Word .docx éditable ou HTML riche à coller dans ton traitement de texte.",
     icon: 'scan',
     tint: 'rgba(255, 83, 16, 0.12)',
     accent: '#ff5310',

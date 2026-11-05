@@ -71,13 +71,32 @@
     }
   }
 
-  function download(filename, text) {
-    const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+  function downloadBlob(filename, blob) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = filename;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
+  function download(filename, text) {
+    downloadBlob(filename, new Blob([text], { type: 'text/markdown;charset=utf-8' }));
+  }
+
+  /* Copie en HTML riche (text/html) pour coller directement dans Word / Google Docs. */
+  async function copyRichHtml(md) {
+    const html = DOMPurify.sanitize(marked.parse(md));
+    if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([md], { type: 'text/plain' }),
+        })]);
+        window.toast('HTML riche copié — colle dans Word avec Ctrl+V.', 'ok');
+        return;
+      } catch { /* repli : copie Markdown */ }
+    }
+    await copyText(md, 'Copié en Markdown (presse-papiers HTML indisponible ici).');
   }
 
   /* ---------- Clé API ---------- */
@@ -366,17 +385,41 @@
 
     const btnCopy = document.createElement('button');
     btnCopy.type = 'button'; btnCopy.className = 'btn btn-sm'; btnCopy.textContent = 'Copier';
+    btnCopy.title = 'Copier le Markdown brut';
     btnCopy.addEventListener('click', () => copyText(item.markdown, 'Markdown copié.'));
 
-    const btnDl = document.createElement('button');
-    btnDl.type = 'button'; btnDl.className = 'btn btn-ghost btn-sm'; btnDl.textContent = 'Télécharger .md';
+    const btnHtml = document.createElement('button');
+    btnHtml.type = 'button'; btnHtml.className = 'btn btn-ghost btn-sm'; btnHtml.textContent = 'HTML';
+    btnHtml.title = 'Copier en HTML riche (coller dans Word / Google Docs avec Ctrl+V)';
+    btnHtml.addEventListener('click', () => copyRichHtml(item.markdown));
+
     const base = item.file.name.replace(/\.[^.]+$/, '');
+
+    const btnDl = document.createElement('button');
+    btnDl.type = 'button'; btnDl.className = 'btn btn-ghost btn-sm'; btnDl.textContent = '.md';
+    btnDl.title = 'Télécharger le Markdown (.md)';
     btnDl.addEventListener('click', () => {
       download(`${base}.ocr.md`, item.markdown);
       window.toast('Fichier .md téléchargé.', 'ok');
     });
 
-    head.append(name, pages, seg, btnCopy, btnDl);
+    const btnDocx = document.createElement('button');
+    btnDocx.type = 'button'; btnDocx.className = 'btn btn-ghost btn-sm'; btnDocx.textContent = '.docx';
+    btnDocx.title = 'Télécharger un document Word éditable (.docx)';
+    btnDocx.addEventListener('click', async () => {
+      btnDocx.disabled = true; btnDocx.classList.add('loading');
+      try {
+        const blob = await window.Md2Docx.mdToDocxBlob(item.markdown, item.file.name);
+        downloadBlob(`${base}.ocr.docx`, blob);
+        window.toast('Document Word .docx téléchargé — éditable dans Word / LibreOffice.', 'ok');
+      } catch (e) {
+        window.toast('Export .docx impossible : ' + (e && e.message ? e.message : e), 'err');
+      } finally {
+        btnDocx.disabled = false; btnDocx.classList.remove('loading');
+      }
+    });
+
+    head.append(name, pages, seg, btnCopy, btnHtml, btnDl, btnDocx);
 
     const body = document.createElement('div');
     body.className = 'result-body';

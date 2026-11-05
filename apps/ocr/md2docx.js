@@ -1,0 +1,180 @@
+/* md2docx.js — Convertit du Markdown (sortie OCR Mistral) en document Word .docx.
+   Basé sur le lexer de marked (tokens) + la librairie docx (window.docx / module docx).
+   UMD : exposé en window.Md2Docx dans le navigateur, module.exports sous Node (tests). */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) {
+    module.exports = factory(root.marked, root.docx);
+  } else {
+    root.Md2Docx = factory(root.marked, root.docx);
+  }
+})(typeof self !== 'undefined' ? self : globalThis, function (marked, docx) {
+  'use strict';
+
+  const HEADING_KEYS = ['HEADING_1', 'HEADING_2', 'HEADING_3', 'HEADING_4', 'HEADING_5', 'HEADING_6'];
+
+  function stripHtml(s) {
+    return String(s).replace(/<[^>]*>/g, '');
+  }
+
+  /* Convertit les tokens inline marked en TextRun docx. */
+  function inlineToRuns(tokens, style) {
+    const runs = [];
+    const st = style || {};
+    for (const t of tokens || []) {
+      switch (t.type) {
+        case 'text':
+          if (t.tokens) runs.push(...inlineToRuns(t.tokens, st));
+          else runs.push(new docx.TextRun({ text: t.text, ...st }));
+          break;
+        case 'strong':
+          runs.push(...inlineToRuns(t.tokens, { ...st, bold: true }));
+          break;
+        case 'em':
+          runs.push(...inlineToRuns(t.tokens, { ...st, italics: true }));
+          break;
+        case 'del':
+          runs.push(...inlineToRuns(t.tokens, { ...st, strike: true }));
+          break;
+        case 'codespan':
+          runs.push(new docx.TextRun({ text: t.text, ...st, font: 'Consolas' }));
+          break;
+        case 'link': {
+          const label = t.tokens ? inlineToRuns(t.tokens, { ...st, color: 'FF5310', underline: { type: 'single' } }) : [new docx.TextRun({ text: t.text || t.href, ...st })];
+          runs.push(...label);
+          break;
+        }
+        case 'image':
+          runs.push(new docx.TextRun({ text: `[image : ${t.text || t.href}]`, ...st, italics: true, color: '6E6A5F' }));
+          break;
+        case 'br':
+          runs.push(new docx.TextRun({ text: '', break: 1, ...st }));
+          break;
+        case 'escape':
+          runs.push(new docx.TextRun({ text: t.text, ...st }));
+          break;
+        case 'html':
+          runs.push(new docx.TextRun({ text: stripHtml(t.text), ...st }));
+          break;
+        default:
+          if (t.raw) runs.push(new docx.TextRun({ text: t.raw, ...st }));
+      }
+    }
+    return runs.length ? runs : [new docx.TextRun({ text: '', ...st })];
+  }
+
+  /* Convertit les tokens block marked en éléments docx (Paragraph / Table). */
+  function blocksToElements(tokens, level, quote) {
+    const lv = level || 0;
+    const quoteStyle = quote ? {
+      indent: { left: 720 },
+      border: { left: { color: 'FF5310', size: 12, style: docx.BorderStyle.SINGLE, space: 8 } },
+    } : {};
+    const els = [];
+    for (const t of tokens || []) {
+      switch (t.type) {
+        case 'heading':
+          els.push(new docx.Paragraph({
+            heading: docx.HeadingLevel[HEADING_KEYS[Math.min(6, t.depth) - 1]],
+            children: inlineToRuns(t.tokens),
+            ...quoteStyle,
+          }));
+          break;
+        case 'paragraph':
+          els.push(new docx.Paragraph({ children: inlineToRuns(t.tokens), ...quoteStyle }));
+          break;
+        case 'list': {
+          t.items.forEach((item, i) => {
+            // aplati : texte inline de l'item + sous-listes éventuelles
+            const inlineToks = [];
+            const subBlocks = [];
+            for (const it of item.tokens || []) {
+              if (it.type === 'text' && it.tokens) inlineToks.push(...it.tokens);
+              else if (it.type === 'text') inlineToks.push(it);
+              else if (it.type === 'paragraph') inlineToks.push(...(it.tokens || []));
+              else subBlocks.push(it);
+            }
+            const runs = inlineToRuns(inlineToks);
+            if (t.ordered) runs.unshift(new docx.TextRun({ text: `${i + 1}. `, bold: false }));
+            els.push(new docx.Paragraph({
+              children: runs,
+              ...(t.ordered ? {} : { bullet: { level: Math.min(8, lv) } }),
+              ...(lv > 0 ? { indent: { left: 720 * (lv + 1) } } : {}),
+            }));
+            if (subBlocks.length) els.push(...blocksToElements(subBlocks, lv + 1));
+          });
+          break;
+        }
+        case 'table': {
+          const cellToPar = (cell) => new docx.Paragraph({ children: inlineToRuns(cell.tokens) });
+          const rows = [];
+          if (t.header && t.header.length) {
+            rows.push(new docx.TableRow({
+              tableHeader: true,
+              children: t.header.map((c) => new docx.TableCell({ children: [cellToPar(c)] })),
+            }));
+          }
+          for (const row of t.rows || []) {
+            rows.push(new docx.TableRow({
+              children: row.map((c) => new docx.TableCell({ children: [cellToPar(c)] })),
+            }));
+          }
+          els.push(new docx.Table({
+            width: { size: 100, type: docx.WidthType.PERCENTAGE },
+            rows,
+          }));
+          break;
+        }
+        case 'code': {
+          const lines = String(t.text || '').split('\n');
+          const runs = [];
+          lines.forEach((line, i) => {
+            if (i > 0) runs.push(new docx.TextRun({ text: '', break: 1 }));
+            runs.push(new docx.TextRun({ text: line || ' ', font: 'Consolas', size: 18 }));
+          });
+          els.push(new docx.Paragraph({ children: runs, spacing: { before: 120, after: 120 } }));
+          break;
+        }
+        case 'blockquote':
+          els.push(...blocksToElements(t.tokens, lv, true));
+          break;
+        case 'hr':
+          els.push(new docx.Paragraph({
+            children: [],
+            border: { bottom: { color: 'A8A294', size: 6, style: docx.BorderStyle.SINGLE, space: 1 } },
+          }));
+          break;
+        case 'html':
+          els.push(new docx.Paragraph({ children: [new docx.TextRun(stripHtml(t.text))] }));
+          break;
+        case 'space':
+        default:
+          break;
+      }
+    }
+    return els;
+  }
+
+  function buildDocument(md, title) {
+    const tokens = marked.lexer(String(md || ''));
+    return new docx.Document({
+      creator: 'Lenancker Launcher — OCR Mistral',
+      title: title || 'Document OCR',
+      description: 'Texte extrait par OCR (mistral-ocr-latest) via le Lenancker Launcher.',
+      sections: [{ children: blocksToElements(tokens) }],
+    });
+  }
+
+  return {
+    buildDocument,
+    blocksToElements,
+    inlineToRuns,
+    /* Navigateur : renvoie un Blob .docx prêt à télécharger. */
+    async mdToDocxBlob(md, title) {
+      return docx.Packer.toBlob(buildDocument(md, title));
+    },
+    /* Node (tests) : renvoie un Buffer. */
+    async mdToDocxBuffer(md, title) {
+      return docx.Packer.toBuffer(buildDocument(md, title));
+    },
+  };
+});

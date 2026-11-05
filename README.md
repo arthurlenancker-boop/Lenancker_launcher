@@ -10,7 +10,7 @@ Site publié (GitHub Pages) : **https://arthurlenancker-boop.github.io/Lenancker
 
 | App | Statut | Description |
 | --- | --- | --- |
-| `apps/ocr/` — OCR Mistral | disponible | Extrais le texte d'images (PNG/JPG/WEBP/GIF) et de PDF en Markdown via `POST https://api.mistral.ai/v1/ocr` (modèle `mistral-ocr-latest`). Clé API collée dans l'app, stockée en `localStorage`, envoyée uniquement à `api.mistral.ai`. Résultat copiable / téléchargeable en `.md`, avec aperçu rendu. |
+| `apps/ocr/` — OCR Mistral | disponible | Extrais le texte d'images (PNG/JPG/WEBP/GIF) et de PDF via `POST https://api.mistral.ai/v1/ocr` (modèle `mistral-ocr-latest`). Clé API collée dans l'app, stockée en `localStorage`, envoyée uniquement à `api.mistral.ai`. Résultat en Markdown : aperçu rendu, copie Markdown, **copie HTML riche** (coller dans Word/Google Docs) et **export .docx éditable** (via `md2docx.js` + librairie `docx` embarquée), plus téléchargement `.md`. |
 | Pomodoro | bientôt | Sessions de concentration chronométrées. |
 | Révision | bientôt | Fiches de révision espacée et quiz actifs (répétition espacée, test actif). |
 
