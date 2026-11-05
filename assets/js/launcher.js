@@ -4,11 +4,28 @@
 
   document.getElementById('brand-logo').innerHTML = window.iconSvg('grid');
 
-  /* Bandeau défilant : liste des apps, répétée pour la boucle */
+  /* Bandeau défilant : on répète le contenu jusqu'à couvrir la largeur
+     du conteneur, puis on duplique en deux moitiés identiques pour que
+     la boucle translateX(-50%) soit parfaitement continue. */
+  const marquee = document.querySelector('.marquee');
   const track = document.getElementById('marquee-track');
-  const names = (window.LENANCKER_APPS || []).map((a) => a.name);
-  const chunk = names.map((n) => `${n}<b>*</b>`).join('');
-  track.innerHTML = `<span>${chunk}</span><span>${chunk}</span>`;
+  function buildMarquee() {
+    if (!marquee || !track) return;
+    const names = (window.LENANCKER_APPS || []).map((a) => a.name);
+    const unit = names.map((n) => `${n}<b>*</b>`).join('') || 'Lenancker Launcher<b>*</b>';
+    let half = '';
+    for (let i = 0; i < 6; i++) half += `<span>${unit}</span>`;
+    track.innerHTML = half;
+    let guard = 0;
+    while (track.scrollWidth > 0 && track.scrollWidth < marquee.clientWidth && guard < 20) {
+      half += `<span>${unit}</span>`;
+      track.innerHTML = half;
+      guard++;
+    }
+    track.innerHTML = half + half;
+  }
+  buildMarquee();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(buildMarquee);
 
   const grid = document.getElementById('apps-grid');
   const apps = window.LENANCKER_APPS || [];
