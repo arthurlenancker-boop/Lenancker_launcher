@@ -8,6 +8,7 @@
   const MODEL = 'mistral-ocr-latest';
   const LS_KEY = 'lenancker.ocr.apiKey';
   const LS_IMAGES = 'lenancker.ocr.includeImages';
+  const LS_TRIM = 'lenancker.ocr.trimPage';
   const MAX_FILE_BYTES = 50 * 1024 * 1024; // limite API Mistral : 50 Mo
   const WARN_FILE_BYTES = 20 * 1024 * 1024;
 
@@ -20,7 +21,7 @@
   };
 
   /* ---------- État ---------- */
-  let queue = []; // {id, file, kind, status, dataUrl, markdown, pages, error}
+  let queue = []; // {id, file, kind, status, dataUrl, markdown, pages, segments, rects, dpi, error}
   let seq = 0;
   let running = false;
   const CONCURRENCY = 2;  // requêtes OCR en parallèle
@@ -35,12 +36,18 @@
     run: $('run-ocr'), clear: $('clear-files'), queueCount: $('queue-count'),
     progressWrap: $('progress-wrap'), progressBar: $('progress-bar'),
     results: $('results'), empty: $('empty-results'), copyAll: $('copy-all'),
-    includeImages: $('include-images'),
+    includeImages: $('include-images'), trimPage: $('trim-page'), pdfAll: $('pdf-all'),
   };
   if (els.includeImages) {
     els.includeImages.checked = localStorage.getItem(LS_IMAGES) === '1';
     els.includeImages.addEventListener('change', () => {
       localStorage.setItem(LS_IMAGES, els.includeImages.checked ? '1' : '0');
+    });
+  }
+  if (els.trimPage) {
+    els.trimPage.checked = localStorage.getItem(LS_TRIM) !== '0'; // détourage actif par défaut
+    els.trimPage.addEventListener('change', () => {
+      localStorage.setItem(LS_TRIM, els.trimPage.checked ? '1' : '0');
     });
   }
   document.getElementById('brand-logo').innerHTML = window.iconSvg('scan');
@@ -162,6 +169,16 @@
         .catch((e) => { docxPromise = null; throw e; });
     }
     return docxPromise;
+  }
+
+  let pdfLibPromise = null;
+  function ensurePdfLib() {
+    if (!pdfLibPromise) {
+      pdfLibPromise = loadScript('../../assets/vendor/pdf-lib.min.js')
+        .then(() => loadScript('pdfocr.js')) // pdfocr capture window.PDFLib : charger pdf-lib d'abord
+        .catch((e) => { pdfLibPromise = null; throw e; });
+    }
+    return pdfLibPromise;
   }
 
   /* Copie en HTML riche (text/html) pour coller directement dans Word / Google Docs. */
@@ -404,7 +421,12 @@
         'Authorization': `Bearer ${key}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ model: MODEL, document, include_image_base64: includeImages }),
+      body: JSON.stringify({
+        model: MODEL,
+        document,
+        include_image_base64: includeImages,
+        include_blocks: true, // bbox des blocs (px de l'image) pour le PDF à texte sélectionnable
+      }),
     });
 
     if (!res.ok) {
@@ -436,6 +458,14 @@
       }
     }
     if (!item.markdown) throw new Error('Réponse vide de l’API OCR.');
+
+    // Blocs OCR (bbox en px de l'image) pour le calque texte du PDF exportable
+    if (item.kind === 'image' && pages[0]) {
+      const blocks = collectOcrBlocks(pages[0]);
+      item.segments = blocks.segments;
+      item.rects = blocks.rects;
+      item.dpi = Number(pages[0].dimensions?.dpi) || null;
+    }
   }
 
   function friendlyError(err) {
@@ -445,6 +475,183 @@
     if (s === 429) return 'Quota ou limite de débit atteinte — réessaie dans un instant.';
     if (s === 400) return `Requête refusée par l’API : ${err.message}`;
     return err.message || 'Erreur inconnue.';
+  }
+
+  /* ---------- PDF « texte sélectionnable » (image du scan + calque invisible) ---------- */
+  /* Récupère les blocs OCR avec leurs bbox (px de l'image, origine haut-gauche).
+     Modèle récent : pages[].blocks (top_left_x… bottom_right_y, content, ordre de lecture).
+     Anciens modèles : pages[].bbox avec segments imbriqués (bbox [MinX, MaxX, MinY, MaxY]). */
+  function collectOcrBlocks(page) {
+    const segments = []; // {x0, y0, x1, y1, text} — texte du calque
+    const rects = [];    // bbox de tous les blocs — garde-fou du détourage
+    const dims = {
+      w: Number(page.dimensions?.width) || null,
+      h: Number(page.dimensions?.height) || null,
+    };
+    const toPx = (b) => {
+      let [x0, x1, y0, y1] = b.map(Number);
+      if (![x0, x1, y0, y1].every(Number.isFinite)) return null;
+      const maxV = Math.max(x0, x1, y0, y1);
+      if (maxV <= 1.05 && dims.w && dims.h) { // fractions normalisées [0..1]
+        x0 *= dims.w; x1 *= dims.w; y0 *= dims.h; y1 *= dims.h;
+      }
+      return { x0: Math.min(x0, x1), x1: Math.max(x0, x1), y0: Math.min(y0, y1), y1: Math.max(y0, y1) };
+    };
+
+    if (Array.isArray(page.blocks)) {
+      for (const blk of page.blocks) {
+        if (!blk) continue;
+        const r = toPx([blk.top_left_x, blk.bottom_right_x, blk.top_left_y, blk.bottom_right_y]);
+        if (!r) continue;
+        rects.push(r);
+        if (blk.content) segments.push({ ...r, text: blk.content });
+      }
+    } else if (Array.isArray(page.bbox)) {
+      for (const el of page.bbox) {
+        if (!el || !Array.isArray(el.bbox)) continue;
+        const r = toPx(el.bbox);
+        if (!r) continue;
+        rects.push(r);
+        const segs = Array.isArray(el.segments) ? el.segments : [];
+        if (segs.length) {
+          for (const s of segs) {
+            if (!s || !s.text) continue;
+            const sr = Array.isArray(s.bbox) ? toPx(s.bbox) : r;
+            if (sr) segments.push({ ...sr, text: s.text });
+          }
+        } else if (el.text) {
+          segments.push({ ...r, text: el.text });
+        }
+      }
+    }
+    return { segments, rects };
+  }
+
+  /* Décode un fichier image en bitmap pour le canvas (dims + détourage). */
+  async function decodeBitmap(file) {
+    if (window.createImageBitmap) {
+      try { return await createImageBitmap(file); } catch { /* repli <img> */ }
+    }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.decoding = 'async';
+    try {
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = () => reject(new Error('Image illisible.'));
+        img.src = url;
+      });
+    } finally {
+      setTimeout(() => URL.revokeObjectURL(url), 15000);
+    }
+    return img;
+  }
+
+  const bitmapDims = (bmp) => ({ w: bmp.naturalWidth || bmp.width, h: bmp.naturalHeight || bmp.height });
+
+  /* Détourage du scan : détecte la page claire sur fond plus sombre (la table autour
+     de la feuille scannée). Ne coupe jamais une zone contenant un bloc OCR. */
+  async function detectPageTrim(item, bmp) {
+    try {
+      const { w: imgW, h: imgH } = bitmapDims(bmp);
+      if (!imgW || !imgH) return null;
+      const k = Math.min(1, 1400 / Math.max(imgW, imgH)); // travaille sur une version réduite
+      const w = Math.max(4, Math.round(imgW * k));
+      const h = Math.max(4, Math.round(imgH * k));
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(bmp, 0, 0, w, h);
+      const data = ctx.getImageData(0, 0, w, h).data;
+
+      const row = new Float32Array(h);
+      const colFull = new Float32Array(w);
+      for (let y = 0; y < h; y++) {
+        let s = 0;
+        for (let x = 0; x < w; x++) {
+          const i = (y * w + x) * 4;
+          const v = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) / 255;
+          s += v; colFull[x] += v;
+        }
+        row[y] = s / w;
+      }
+      for (let x = 0; x < w; x++) colFull[x] /= h;
+
+      const ins = window.PdfOcr.insetsFromProfiles(row, colFull, w, h);
+      if (!ins) return null;
+
+      // colonnes re-mesurées dans la bande verticale de la page (hors bandes table haut/bas)
+      const bandTop = ins.top, bandBottom = ins.bottom;
+      if (h - bandTop - bandBottom < 2) return null;
+      const col = new Float32Array(w);
+      for (let x = 0; x < w; x++) {
+        let s = 0;
+        for (let y = bandTop; y < h - bandBottom; y++) {
+          const i = (y * w + x) * 4;
+          s += (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) / 255;
+        }
+        col[x] = s / (h - bandTop - bandBottom);
+      }
+      const ins2 = window.PdfOcr.insetsFromProfiles(row, col, w, h);
+      if (!ins2) return null;
+
+      const box = {
+        left: Math.floor(ins2.left / k),
+        top: Math.floor(ins.top / k),
+        right: Math.floor(ins2.right / k),
+        bottom: Math.floor(ins.bottom / k),
+      };
+
+      // garde-fou : ne jamais couper un bloc OCR détecté (texte, figure, tableau)
+      const rects = item.rects || [];
+      if (rects.length) {
+        const padX = Math.max(2, Math.round(imgW * 0.006));
+        const padY = Math.max(2, Math.round(imgH * 0.006));
+        box.left = Math.min(box.left, Math.max(0, Math.floor(Math.min(...rects.map((r) => r.x0)) - padX)));
+        box.top = Math.min(box.top, Math.max(0, Math.floor(Math.min(...rects.map((r) => r.y0)) - padY)));
+        box.right = Math.min(box.right, Math.max(0, Math.floor(imgW - Math.max(...rects.map((r) => r.x1)) - padX)));
+        box.bottom = Math.min(box.bottom, Math.max(0, Math.floor(imgH - Math.max(...rects.map((r) => r.y1)) - padY)));
+      }
+
+      // marges déjà minimes : scan propre, rien à détourer
+      if ((box.left + box.right) / imgW < 0.01 && (box.top + box.bottom) / imgH < 0.01) return null;
+      return box;
+    } catch {
+      return null; // détourage impossible : PDF plein cadre sur l'image originale
+    }
+  }
+
+  /* Octets intégrables dans le PDF : JPEG/PNG d'origine (sans recompression),
+     autres formats (WEBP, GIF…) convertis en PNG via canvas. */
+  async function toEmbeddableBytes(file, bmp) {
+    const type = (file.type || '').toLowerCase();
+    if (type === 'image/jpeg' || type === 'image/jpg') {
+      return { bytes: new Uint8Array(await file.arrayBuffer()), mime: 'image/jpeg' };
+    }
+    if (type === 'image/png') {
+      return { bytes: new Uint8Array(await file.arrayBuffer()), mime: 'image/png' };
+    }
+    const { w, h } = bitmapDims(bmp);
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    cv.getContext('2d').drawImage(bmp, 0, 0);
+    const blob = await new Promise((resolve) => cv.toBlob(resolve, 'image/png'));
+    if (!blob) throw new Error('Conversion PNG impossible.');
+    return { bytes: new Uint8Array(await blob.arrayBuffer()), mime: 'image/png' };
+  }
+
+  /* Prépare la page PDF d'un scan : image d'origine + blocs OCR + détourage éventuel. */
+  async function buildPdfPageSpec(item) {
+    const bmp = await decodeBitmap(item.file);
+    try {
+      const { w, h } = bitmapDims(bmp);
+      let trim = null;
+      if (els.trimPage && els.trimPage.checked) trim = await detectPageTrim(item, bmp);
+      const { bytes, mime } = await toEmbeddableBytes(item.file, bmp);
+      return { bytes, mime, widthPx: w, heightPx: h, dpi: item.dpi || null, trim, segments: item.segments || [] };
+    } finally {
+      if (bmp.close) { try { bmp.close(); } catch { /* déjà fermée */ } }
+    }
   }
 
   /* ---------- Lancement ---------- */
@@ -508,9 +715,16 @@
 
   /* ---------- Résultats ---------- */
   function refreshResultsVisibility() {
-    const has = queue.some((q) => q.status === 'ok');
+    const oks = queue.filter((q) => q.status === 'ok');
+    const has = oks.length > 0;
     els.empty.classList.toggle('hidden', has);
     els.copyAll.classList.toggle('hidden', !has);
+    if (els.pdfAll) {
+      const imageOks = oks.filter((q) => q.kind === 'image').length;
+      els.pdfAll.classList.toggle('hidden', imageOks < 1);
+      els.pdfAll.textContent = `PDF combiné (${imageOks} feuille${imageOks > 1 ? 's' : ''})`;
+      els.pdfAll.title = 'Un seul PDF : chaque scan tel qu\u2019il est, texte invisible sélectionnable, détourage éventuel';
+    }
   }
 
   async function addResultCard(item) {
@@ -572,7 +786,30 @@
       }
     });
 
+    /* PDF « texte sélectionnable » : le scan tel quel + calque de texte invisible. */
+    const btnPdf = document.createElement('button');
+    btnPdf.type = 'button'; btnPdf.className = 'btn btn-ghost btn-sm'; btnPdf.textContent = 'PDF';
+    btnPdf.title = 'Télécharger un PDF à texte sélectionnable : la feuille telle qu\u2019elle est, texte invisible par-dessus';
+    btnPdf.addEventListener('click', async () => {
+      btnPdf.disabled = true; btnPdf.classList.add('loading');
+      try {
+        if (!item.segments || !item.segments.length) {
+          window.toast('Blocs de texte non renvoyés par l\u2019API — le PDF n\u2019aura pas de calque sélectionnable.', 'warn', 6000);
+        }
+        await ensurePdfLib();
+        const spec = await buildPdfPageSpec(item);
+        const bytes = await window.PdfOcr.buildSearchablePdf([spec], base);
+        downloadBlob(`${base}.ocr.pdf`, new Blob([bytes], { type: 'application/pdf' }));
+        window.toast('PDF téléchargé — le texte est sélectionnable dans le document.', 'ok', 5200);
+      } catch (e) {
+        window.toast('Export PDF impossible : ' + (e && e.message ? e.message : e), 'err', 6000);
+      } finally {
+        btnPdf.disabled = false; btnPdf.classList.remove('loading');
+      }
+    });
+
     head.append(name, pages, seg, btnCopy, btnHtml, btnDl, btnDocx);
+    if (item.kind === 'image') head.append(btnPdf);
 
     const body = document.createElement('div');
     body.className = 'result-body';
@@ -619,6 +856,29 @@
       .join('\n\n---\n\n');
     if (all) copyText(all, 'Tout le Markdown a été copié.');
   });
+
+  /* Un seul PDF : toutes les feuilles scannées (une page par scan),
+     texte invisible sélectionnable, dans l'ordre de la file. */
+  if (els.pdfAll) {
+    els.pdfAll.addEventListener('click', async () => {
+      const items = queue.filter((q) => q.status === 'ok' && q.kind === 'image');
+      if (!items.length) return;
+      els.pdfAll.disabled = true; els.pdfAll.classList.add('loading');
+      try {
+        await ensurePdfLib();
+        const specs = [];
+        for (const item of items) specs.push(await buildPdfPageSpec(item)); // séquentiel : canvas coûteux
+        const bytes = await window.PdfOcr.buildSearchablePdf(specs);
+        const name = `scans-ocr-${items.length}-feuille${items.length > 1 ? 's' : ''}.pdf`;
+        downloadBlob(name, new Blob([bytes], { type: 'application/pdf' }));
+        window.toast(`PDF de ${items.length} feuille(s) téléchargé — texte sélectionnable.`, 'ok', 5200);
+      } catch (e) {
+        window.toast('Export PDF impossible : ' + (e && e.message ? e.message : e), 'err', 6000);
+      } finally {
+        els.pdfAll.disabled = false; els.pdfAll.classList.remove('loading');
+      }
+    });
+  }
 
   /* ---------- Init ---------- */
   refreshKeyUI();

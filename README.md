@@ -10,7 +10,7 @@ Site publié (GitHub Pages) : **https://arthurlenancker-boop.github.io/Lenancker
 
 | App | Statut | Description |
 | --- | --- | --- |
-| `apps/ocr/` — OCR Mistral | disponible | Extrais le texte d'images (PNG/JPG/WEBP/GIF) et de PDF via `POST https://api.mistral.ai/v1/ocr` (modèle `mistral-ocr-latest`). Clé API collée dans l'app, stockée en `localStorage`, envoyée uniquement à `api.mistral.ai`. Résultat en Markdown : aperçu rendu avec **maths KaTeX**, copie Markdown, **copie HTML riche** (coller dans Word/Google Docs) et **export .docx éditable** (titres, listes, tableaux, sub/superscripts, images embarquables via l'option « Inclure les images »), plus téléchargement `.md`. Perf : KaTeX/docx chargés uniquement si besoin (maths, export), plusieurs documents analysés en parallèle (2 requêtes). |
+| `apps/ocr/` — OCR Mistral | disponible | Extrais le texte d'images (PNG/JPG/WEBP/GIF) et de PDF via `POST https://api.mistral.ai/v1/ocr` (modèle `mistral-ocr-latest`). Clé API collée dans l'app, stockée en `localStorage`, envoyée uniquement à `api.mistral.ai`. Résultat en Markdown : aperçu rendu avec **maths KaTeX**, copie Markdown, **copie HTML riche** (coller dans Word/Google Docs) et **export .docx éditable** (titres, listes, tableaux, sub/superscripts, images embarquables via l'option « Inclure les images »), plus téléchargement `.md`. **PDF à texte sélectionnable** : le scan tel quel (JPEG/PNG d'origine) + calque de texte invisible positionné sur les bbox renvoyés par l'API (`include_blocks`) ; bouton par scan et **PDF combiné** (une page par feuille) ; **détourage optionnel des scans** (retire les bords de table autour de la feuille, sans jamais couper un bloc détecté). Perf : KaTeX/docx/pdf-lib chargés uniquement si besoin (maths, export), plusieurs documents analysés en parallèle (2 requêtes). |
 | Pomodoro | bientôt | Sessions de concentration chronométrées. |
 | Révision | bientôt | Fiches de révision espacée et quiz actifs (répétition espacée, test actif). |
 
@@ -27,7 +27,7 @@ Site publié (GitHub Pages) : **https://arthurlenancker-boop.github.io/Lenancker
 │   ├── js/launcher.js          ← rendu de la grille d'accueil
 │   ├── fonts/                  ← Inter embarquée (woff2)
 │   ├── icons/                  ← icônes PWA (PNG 192/512/maskable, favicon SVG)
-│   └── vendor/                 ← marked + DOMPurify embarqués ; KaTeX et docx embarqués (chargés à la demande par l'app OCR)
+│   └── vendor/                 ← marked + DOMPurify embarqués ; KaTeX, docx, pdf-lib embarqués (chargés à la demande par l'app OCR)
 ├── apps/ocr/                   ← app OCR Mistral (index.html, ocr.css, ocr.js)
 ├── electron/                   ← wrapper Windows : main.js + package.json (electron-builder)
 └── .github/workflows/deploy.yml ← déploiement GitHub Pages sur push (main)

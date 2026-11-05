@@ -82,6 +82,10 @@
             <input type="checkbox" id="include-images">
             Inclure les images (aperçu + .docx) — réponse API plus lourde
           </label>
+          <label class="small muted row" style="gap:.45rem;cursor:pointer">
+            <input type="checkbox" id="trim-page" checked>
+            Détourer les scans dans les PDF (retire les bords de table autour de la feuille)
+          </label>
         </div>
         <span class="small muted" id="queue-count"></span>
       </div>
@@ -95,7 +99,10 @@
     <section class="reveal" style="--d:.35s" aria-labelledby="h-resultats">
       <div class="row spread" style="margin-bottom:.9rem">
         <h2 id="h-resultats" style="margin:0;font-size:1.35rem;letter-spacing:-.015em">Résultats <em class="serif-em" style="color:var(--accent)">markdown</em></h2>
-        <button class="btn btn-sm hidden" id="copy-all" type="button">Copier tout le Markdown</button>
+        <div class="row">
+          <button class="btn btn-sm hidden" id="pdf-all" type="button" title="Un seul PDF : chaque scan tel qu'il est, texte invisible sélectionnable">PDF combiné</button>
+          <button class="btn btn-sm hidden" id="copy-all" type="button">Copier tout le Markdown</button>
+        </div>
       </div>
 
       <div class="empty-state glass" id="empty-results">
