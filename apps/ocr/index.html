@@ -10,7 +10,6 @@
   <link rel="apple-touch-icon" href="../../assets/icons/apple-touch-icon.png">
   <link rel="manifest" href="../../manifest.webmanifest">
   <link rel="stylesheet" href="../../assets/css/design.css">
-  <link rel="stylesheet" href="../../assets/vendor/katex/katex.min.css">
   <link rel="stylesheet" href="ocr.css">
 </head>
 <body>
@@ -112,14 +111,11 @@
     </footer>
   </main>
 
-  <script src="../../assets/js/apps.js"></script>
-  <script src="../../assets/js/common.js"></script>
-  <script src="../../assets/vendor/marked.min.js"></script>
-  <script src="../../assets/vendor/dompurify.min.js"></script>
-  <script src="../../assets/vendor/docx.min.js"></script>
-  <script src="../../assets/vendor/katex/katex.min.js"></script>
-  <script src="../../assets/vendor/katex/katex-auto-render.min.js"></script>
-  <script src="md2docx.js"></script>
-  <script src="ocr.js"></script>
+  <!-- KaTeX (CSS+JS), docx et md2docx sont chargés à la demande par ocr.js,
+       seulement si le document contient des maths ou lors d'un export .docx. -->
+  <script src="../../assets/js/common.js" defer></script>
+  <script src="../../assets/vendor/marked.min.js" defer></script>
+  <script src="../../assets/vendor/dompurify.min.js" defer></script>
+  <script src="ocr.js" defer></script>
 </body>
 </html>

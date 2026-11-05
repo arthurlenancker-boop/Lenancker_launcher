@@ -23,6 +23,8 @@
   let queue = []; // {id, file, kind, status, dataUrl, markdown, pages, error}
   let seq = 0;
   let running = false;
+  const CONCURRENCY = 2;  // requêtes OCR en parallèle
+  const STAGGER_MS = 500; // décalage entre démarrages (limite de débit API)
 
   /* ---------- Raccourcis DOM ---------- */
   const $ = (id) => document.getElementById(id);
@@ -91,9 +93,80 @@
     downloadBlob(filename, new Blob([text], { type: 'text/markdown;charset=utf-8' }));
   }
 
+  /* ---------- Chargement à la demande ----------
+     KaTeX (~280 Ko) et docx (~330 Ko) ne sont téléchargés/interprétés que
+     si le document en a réellement besoin (maths présentes, export .docx).
+     Le service worker sert ensuite ces fichiers depuis son cache (hors-ligne OK). */
+  const scriptCache = new Map();
+  const styleCache = new Map();
+
+  function loadScript(src) {
+    if (scriptCache.has(src)) return scriptCache.get(src);
+    const p = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = () => resolve();
+      s.onerror = () => {
+        scriptCache.delete(src);
+        s.remove();
+        reject(new Error(`Chargement impossible : ${src}`));
+      };
+      document.head.appendChild(s);
+    });
+    scriptCache.set(src, p);
+    return p;
+  }
+
+  function loadStyle(href) {
+    if (styleCache.has(href)) return styleCache.get(href);
+    const p = new Promise((resolve, reject) => {
+      const l = document.createElement('link');
+      l.rel = 'stylesheet';
+      l.href = href;
+      l.onload = () => resolve();
+      l.onerror = () => {
+        styleCache.delete(href);
+        l.remove();
+        reject(new Error(`Chargement impossible : ${href}`));
+      };
+      document.head.appendChild(l);
+    });
+    styleCache.set(href, p);
+    return p;
+  }
+
+  /* true si le texte contient des maths (délimiteurs LaTeX). */
+  function hasMath(text) {
+    const s = String(text || '');
+    return s.includes('\\(') || s.includes('\\[') || /\$[^$\n]+\$/.test(s);
+  }
+
+  let katexPromise = null;
+  function ensureKatex() {
+    if (!katexPromise) {
+      katexPromise = Promise.all([
+        loadStyle('../../assets/vendor/katex/katex.min.css'),
+        loadScript('../../assets/vendor/katex/katex.min.js').then(() =>
+          loadScript('../../assets/vendor/katex/katex-auto-render.min.js')
+        ),
+      ]).catch((e) => { katexPromise = null; throw e; });
+    }
+    return katexPromise;
+  }
+
+  let docxPromise = null;
+  function ensureDocx() {
+    if (!docxPromise) {
+      docxPromise = loadScript('../../assets/vendor/docx.min.js')
+        .then(() => loadScript('md2docx.js')) // md2docx capture window.docx : charger docx d'abord
+        .catch((e) => { docxPromise = null; throw e; });
+    }
+    return docxPromise;
+  }
+
   /* Copie en HTML riche (text/html) pour coller directement dans Word / Google Docs. */
   async function copyRichHtml(md, images) {
-    const html = mdToRichHtml(md, images);
+    const html = await renderPreviewHtml(md, images);
     if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
       try {
         await navigator.clipboard.write([new ClipboardItem({
@@ -305,10 +378,16 @@
     strict: false,
   };
 
-  function mdToRichHtml(md, images) {
+  /* HTML préparé (aperçu / copie riche) : charge KaTeX au besoin.
+     Si KaTeX est indisponible (hors-ligne sans cache), le texte s'affiche quand même. */
+  async function renderPreviewHtml(md, images) {
+    const prep = prepareMarkdown(md, images);
+    if (hasMath(prep)) {
+      try { await ensureKatex(); } catch { /* aperçu sans maths mises en forme */ }
+    }
     const div = document.createElement('div');
-    div.innerHTML = DOMPurify.sanitize(marked.parse(prepareMarkdown(md, images)));
-    if (window.renderMathInElement) window.renderMathInElement(div, KATEX_OPTS);
+    div.innerHTML = DOMPurify.sanitize(marked.parse(prep));
+    if (hasMath(prep) && window.renderMathInElement) window.renderMathInElement(div, KATEX_OPTS);
     return div.innerHTML;
   }
 
@@ -391,23 +470,35 @@
     };
     updateProgress();
 
-    for (const item of todo) {
-      setItemStatus(item, 'working');
-      try {
-        if (!item.dataUrl) item.dataUrl = await readAsDataURL(item.file);
-        await callOcr(item, key, 1);
-        item.status = 'ok';
-        addResultCard(item);
-        window.toast(`OCR terminé : ${item.file.name}`, 'ok');
-      } catch (err) {
-        item.status = 'err';
-        item.error = friendlyError(err);
-        window.toast(`${item.file.name} — ${item.error}`, 'err', 6000);
+    // Pool de workers : CONCURRENCY fichiers analysés en parallèle, le reste en file.
+    let cursor = 0;
+    const worker = async (startDelay) => {
+      if (startDelay) await new Promise((r) => setTimeout(r, startDelay));
+      while (cursor < todo.length) {
+        const item = todo[cursor++];
+        setItemStatus(item, 'working');
+        try {
+          if (!item.dataUrl) item.dataUrl = await readAsDataURL(item.file);
+          await callOcr(item, key, 1);
+          item.status = 'ok';
+          item.dataUrl = null; // libère le base64 en mémoire (jusqu'à ~67 Mo par PDF)
+          window.toast(`OCR terminé : ${item.file.name}`, 'ok');
+        } catch (err) {
+          item.status = 'err';
+          item.error = friendlyError(err);
+          window.toast(`${item.file.name} — ${item.error}`, 'err', 6000);
+        }
+        done++;
+        updateProgress();
+        renderQueue();
+        if (item.status === 'ok') {
+          try { await addResultCard(item); } catch { /* aperçu raté : le markdown reste copiable */ }
+        }
       }
-      done++;
-      updateProgress();
-      renderQueue();
-    }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(CONCURRENCY, todo.length) }, (_, i) => worker(i * STAGGER_MS))
+    );
 
     running = false;
     els.run.classList.remove('loading');
@@ -422,7 +513,7 @@
     els.copyAll.classList.toggle('hidden', !has);
   }
 
-  function addResultCard(item) {
+  async function addResultCard(item) {
     const card = document.createElement('article');
     card.className = 'glass result-card';
 
@@ -470,6 +561,7 @@
     btnDocx.addEventListener('click', async () => {
       btnDocx.disabled = true; btnDocx.classList.add('loading');
       try {
+        await ensureDocx();
         const blob = await window.Md2Docx.mdToDocxBlob(item.markdown, item.file.name, item.images);
         downloadBlob(`${base}.ocr.docx`, blob);
         window.toast('Document Word .docx téléchargé — éditable dans Word / LibreOffice.', 'ok');
@@ -487,7 +579,7 @@
 
     const preview = document.createElement('div');
     preview.className = 'md-preview';
-    preview.innerHTML = mdToRichHtml(item.markdown, item.images);
+    preview.innerHTML = await renderPreviewHtml(item.markdown, item.images);
 
     const source = document.createElement('textarea');
     source.className = 'md-source hidden';
@@ -506,7 +598,16 @@
 
     body.append(preview, source);
     card.append(head, body);
-    els.results.appendChild(card);
+
+    // Insère la carte dans l'ordre de la file (l'OCR parallèle termine hors ordre).
+    card.dataset.qid = String(item.id);
+    let before = null;
+    for (const existing of els.results.children) {
+      if (Number(existing.dataset.qid || 0) > item.id) { before = existing; break; }
+    }
+    if (before) els.results.insertBefore(card, before);
+    else els.results.appendChild(card);
+
     refreshResultsVisibility();
     card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
