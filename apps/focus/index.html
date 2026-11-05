@@ -205,7 +205,10 @@
     <section class="glass panel reveal" style="--d:.35s" aria-labelledby="h-stats">
       <div class="panel-head">
         <h2 id="h-stats">Ta <em class="serif-em">consistance</em></h2>
-        <span class="small muted">7 derniers jours</span>
+        <span class="row" style="gap:.6rem">
+          <span class="small muted">7 derniers jours</span>
+          <span class="badge soon-badge" id="storage-badge" hidden>stockage non conservé</span>
+        </span>
       </div>
       <div class="week-chart" id="week-chart" role="img" aria-label="Minutes de focus des 7 derniers jours"></div>
       <div class="row spread" style="margin-top:0.9rem">
@@ -213,6 +216,16 @@
         <div class="stat"><span class="mono stat-val" id="stat-streak">0</span><span class="small muted">jour(s) de série</span></div>
         <div class="stat"><span class="mono stat-val" id="stat-sessions">0</span><span class="small muted">sessions</span></div>
         <div class="stat"><span class="mono stat-val" id="stat-points">0</span><span class="small muted">points (1/min)</span></div>
+      </div>
+      <p class="small muted hidden" id="storage-info" style="margin-top:0.8rem;margin-bottom:0">
+        Chaque navigateur garde ses propres données : le site en ligne, un localhost et l'exe Windows
+        ont chacun leur stockage, et une fenêtre privée efface tout à la fermeture.
+        Exporte tes données ci-dessous pour les garder ou les transporter.
+      </p>
+      <div class="row" style="margin-top:0.9rem">
+        <button class="btn btn-ghost btn-sm" id="btn-export" type="button">Exporter mes données (.json)</button>
+        <button class="btn btn-ghost btn-sm" id="btn-import" type="button">Importer des données</button>
+        <input type="file" id="import-input" class="hidden" accept="application/json,.json">
       </div>
     </section>
 

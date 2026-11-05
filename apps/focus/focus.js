@@ -44,8 +44,41 @@
     again: $('btn-again'),
     weekChart: $('week-chart'),
     statTotal: $('stat-total'), statStreak: $('stat-streak'), statSessions: $('stat-sessions'), statPoints: $('stat-points'),
+    storageBadge: $('storage-badge'), btnExport: $('btn-export'), btnImport: $('btn-import'),
+    importInput: $('import-input'), storageInfo: $('storage-info'),
   };
   els.brand.innerHTML = window.iconSvg('timer');
+
+  /* ---------- Stockage local fiable ----------
+     localStorage dépend du navigateur : fenêtre privée = vidé à la fermeture,
+     origine différente (site / localhost / exe) = données séparées.
+     On détecte l'indisponibilité au lieu d'échouer en silence. */
+  let storageOk = true;
+  const storage = {
+    get(key) {
+      try { return localStorage.getItem(key); } catch { return null; }
+    },
+    set(key, value) {
+      try {
+        localStorage.setItem(key, value);
+        return true;
+      } catch {
+        if (storageOk) {
+          storageOk = false;
+          renderStorageState();
+          window.toast('Stockage local indisponible (fenêtre privée ?) — les points et réglages ne seront pas conservés au rechargement.', 'warn', 8000);
+        }
+        return false;
+      }
+    },
+  };
+  function renderStorageState() {
+    if (els.storageBadge) {
+      els.storageBadge.hidden = storageOk;
+      if (!storageOk) els.storageBadge.textContent = 'stockage non conservé';
+    }
+    if (els.storageInfo) els.storageInfo.classList.toggle('hidden', storageOk);
+  }
 
   /* ---------- Réglages ---------- */
   const defaults = {
@@ -56,11 +89,11 @@
   };
   let settings = Object.assign({}, defaults);
   try {
-    settings = Object.assign(defaults, JSON.parse(localStorage.getItem(LS.settings) || '{}'));
+    settings = Object.assign(defaults, JSON.parse(storage.get(LS.settings) || '{}'));
   } catch { /* réglages corrompus : valeurs par défaut */ }
 
   function persistSettings() {
-    localStorage.setItem(LS.settings, JSON.stringify(settings));
+    storage.set(LS.settings, JSON.stringify(settings));
   }
 
   function applySettingsToUI() {
@@ -81,12 +114,12 @@
     document.documentElement.classList.toggle('fx-reduce', !!settings.reduceAnim);
   }
   applySettingsToUI();
-  if (!localStorage.getItem(LS.settings) && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  if (!storage.get(LS.settings) && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     settings.reduceAnim = true; applySettingsToUI(); persistSettings();
   }
 
   let intent = {};
-  try { intent = JSON.parse(localStorage.getItem(LS.intent) || '{}') || {}; } catch { intent = {}; }
+  try { intent = JSON.parse(storage.get(LS.intent) || '{}') || {}; } catch { intent = {}; }
   if (intent.task) els.task.value = intent.task;
   if (intent.ifThen) els.ifThen.value = intent.ifThen;
   if (intent.reward) els.reward.value = intent.reward;
@@ -256,10 +289,10 @@
 
   /* ---------- Sessions / stats ---------- */
   function loadSessions() {
-    try { return JSON.parse(localStorage.getItem(LS.sessions) || '[]') || []; } catch { return []; }
+    try { return JSON.parse(storage.get(LS.sessions) || '[]') || []; } catch { return []; }
   }
   function loadDays() {
-    try { return JSON.parse(localStorage.getItem(LS.days) || '{}') || {}; } catch { return {}; }
+    try { return JSON.parse(storage.get(LS.days) || '{}') || {}; } catch { return {}; }
   }
 
   function renderStats() {
@@ -269,7 +302,6 @@
     const totalMs = sessions.reduce((a, s) => a + (s.focusMs || 0), 0);
     const points = FocusCore.pointsFor(totalMs);
     const streak = FocusCore.computeStreak(Object.keys(days), Date.now());
-
     els.weekChart.innerHTML = '';
     const maxMs = Math.max(...week.map((d) => d.focusMs), 5 * MIN);
     week.forEach((d, i) => {
@@ -292,6 +324,114 @@
     els.statStreak.textContent = streak;
     els.statSessions.textContent = sessions.length;
     els.statPoints.textContent = points;
+  }
+
+  /* ---------- Export / import (les données te suivent) ----------
+     Le localStorage est propre à chaque contexte (fenêtre privée vidée à la
+     fermeture, site ≠ localhost ≠ exe). L'export permet de conserver et
+     transporter réglages, points, sessions et série. */
+  function downloadBlob(filename, blob) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
+  function exportData() {
+    const payload = {
+      app: 'lenancker-focus',
+      v: 1,
+      exportedAt: new Date().toISOString(),
+      settings,
+      intent,
+      sessions: loadSessions(),
+      days: loadDays(),
+    };
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    const name = `lenancker-focus-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.json`;
+    downloadBlob(name, new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+    window.toast('Données exportées — garde ce fichier, il restaure tout.', 'ok');
+  }
+
+  function sanitizeSettings(inc) {
+    const out = Object.assign({}, defaults, settings);
+    if (!inc || typeof inc !== 'object') return out;
+    if (inc.mode === 'flux' || inc.mode === 'pomodoro') out.mode = inc.mode;
+    out.fluxMin = clampInt(inc.fluxMin, 1, 120, out.fluxMin);
+    out.fluxMax = clampInt(inc.fluxMax, 5, 240, out.fluxMax);
+    out.pomFocus = clampInt(inc.pomFocus, 5, 90, out.pomFocus);
+    out.pomBreak = clampInt(inc.pomBreak, 1, 30, out.pomBreak);
+    out.pomCycles = clampInt(inc.pomCycles, 1, 10, out.pomCycles);
+    if (['none', 'white', 'pink', 'brown'].includes(inc.noise)) out.noise = inc.noise;
+    if (Number.isFinite(Number(inc.noiseVol))) out.noiseVol = Math.min(1, Math.max(0, Number(inc.noiseVol)));
+    if (['none', 'soft', 'tick'].includes(inc.sounds)) out.sounds = inc.sounds;
+    if (typeof inc.fidget === 'boolean') out.fidget = inc.fidget;
+    if (typeof inc.reduceAnim === 'boolean') out.reduceAnim = inc.reduceAnim;
+    return out;
+  }
+
+  async function importData(file) {
+    let data;
+    try {
+      data = JSON.parse(await file.text());
+    } catch {
+      window.toast('Fichier illisible : ce n\u2019est pas du JSON.', 'err');
+      return;
+    }
+    if (!data || data.app !== 'lenancker-focus' || typeof data !== 'object') {
+      window.toast('Fichier inconnu — exporte d\u2019abord tes données depuis l\u2019app Focus.', 'err');
+      return;
+    }
+    // réglages
+    settings = sanitizeSettings(data.settings);
+    persistSettings();
+    applySettingsToUI();
+    if (data.intent && typeof data.intent === 'object') {
+      intent = {
+        task: String(data.intent.task || ''),
+        ifThen: String(data.intent.ifThen || ''),
+        reward: String(data.intent.reward || ''),
+      };
+      storage.set(LS.intent, JSON.stringify(intent));
+      els.task.value = intent.task; els.ifThen.value = intent.ifThen; els.reward.value = intent.reward;
+    }
+    // sessions : fusion sans doublon (clé ts)
+    if (Array.isArray(data.sessions)) {
+      const seen = new Set(loadSessions().map((s) => s.ts));
+      const merged = loadSessions();
+      for (const s of data.sessions) {
+        if (s && Number.isFinite(s.ts) && !seen.has(s.ts)) {
+          seen.add(s.ts);
+          merged.push({ ts: s.ts, focusMs: Math.max(0, Number(s.focusMs) || 0), distractions: Math.max(0, Math.floor(Number(s.distractions) || 0)), mode: s.mode === 'pomodoro' ? 'pomodoro' : 'flux', segments: Math.max(0, Math.floor(Number(s.segments) || 0)) });
+        }
+      }
+      merged.sort((a, b) => a.ts - b.ts);
+      storage.set(LS.sessions, JSON.stringify(merged));
+    }
+    // série de jours
+    if (data.days && typeof data.days === 'object') {
+      const days = loadDays();
+      for (const k of Object.keys(data.days)) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(k)) days[k] = true;
+      }
+      storage.set(LS.days, JSON.stringify(days));
+    }
+    renderStats();
+    window.toast('Données importées : réglages, points et série fusionnés.', 'ok');
+  }
+
+  if (els.btnExport) els.btnExport.addEventListener('click', exportData);
+  if (els.btnImport) {
+    els.btnImport.addEventListener('click', () => els.importInput && els.importInput.click());
+    if (els.importInput) {
+      els.importInput.addEventListener('change', () => {
+        const f = els.importInput.files && els.importInput.files[0];
+        if (f) importData(f);
+        els.importInput.value = '';
+      });
+    }
   }
 
   /* ---------- Machine de session ---------- */
@@ -336,7 +476,7 @@
       ifThen: els.ifThen.value.trim(),
       reward: els.reward.value.trim(),
     };
-    localStorage.setItem(LS.intent, JSON.stringify(intent));
+    storage.set(LS.intent, JSON.stringify(intent));
 
     const durations = settings.mode === 'pomodoro'
       ? { pomFocusMs: settings.pomFocus * MIN, pomBreakMs: settings.pomBreak * MIN, cycles: settings.pomCycles }
@@ -429,10 +569,10 @@
 
     const sessions = loadSessions();
     sessions.push({ ts: Date.now(), focusMs: s.focusMs, distractions: s.distractions, mode: s.mode, segments: s.segments });
-    localStorage.setItem(LS.sessions, JSON.stringify(sessions));
+    storage.set(LS.sessions, JSON.stringify(sessions));
     const days = loadDays();
     days[FocusCore.dayKey(Date.now())] = true;
-    localStorage.setItem(LS.days, JSON.stringify(days));
+    storage.set(LS.days, JSON.stringify(days));
 
     stepStates({ focus: 'done', break: 'done', done: 'active' });
     els.donePoints.textContent = `${s.points} point${s.points > 1 ? 's' : ''}`;
@@ -442,7 +582,8 @@
       `<span class="stat-line">${s.segments} segment${s.segments > 1 ? 's' : ''} (moy. ${min(s.avgSegMs)})</span>`,
       `<span class="stat-line">${s.breaks} pause${s.breaks > 1 ? 's' : ''} active${s.breaks > 1 ? 's' : ''}</span>`,
       `<span class="stat-line">${s.distractions} distraction${s.distractions > 1 ? 's' : ''} notée${s.distractions > 1 ? 's' : ''}</span>`,
-    ].join(' ');
+      s.points === 0 ? `<span class="stat-line muted">sous la minute : pas encore de point (1 point par minute de focus)</span>` : '',
+    ].filter(Boolean).join(' ');
     els.doneRewardLead.textContent = intent.reward ? 'Maintenant, ta récompense :' : 'Une idée de récompense (centre d\u2019intérêt) pour la prochaine fois ?';
     showScreen('done');
     renderStats();
@@ -543,4 +684,5 @@
   /* ---------- Init ---------- */
   renderStats();
   presence.render();
+  renderStorageState();
 })();
