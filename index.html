@@ -5,38 +5,43 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Lenancker Launcher — Tes apps d'études</title>
   <meta name="description" content="Lenancker Launcher regroupe les applications d'études d'Arthur : OCR Mistral, Pomodoro, Révision... Installable sur Windows et Android.">
-  <meta name="theme-color" content="#0b0d17">
+  <meta name="theme-color" content="#0f0e0b">
   <link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
   <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="assets/css/design.css">
 </head>
 <body>
-  <div class="bg-blobs" aria-hidden="true">
-    <div class="blob blob-1"></div>
-    <div class="blob blob-2"></div>
-    <div class="blob blob-3"></div>
+  <div class="bg" aria-hidden="true">
+    <div class="bg-grid"></div>
+    <div class="bg-glow"></div>
+    <div class="bg-grain"></div>
   </div>
 
   <main class="shell">
     <header class="topbar reveal" style="--d:.05s">
-      <a class="brand" href="./">
+      <a class="brand" href="index.html">
         <span class="brand-logo" aria-hidden="true" id="brand-logo"></span>
-        <span class="brand-name">Lenancker<small>Launcher</small></span>
+        <span class="brand-name">Lenancker<em>launcher</em></span>
       </a>
       <span class="badge">PWA installable</span>
     </header>
 
     <section class="hero reveal" style="--d:.15s">
-      <h1>Tes apps d'études,<br><span class="grad-text">réunies au même endroit.</span></h1>
+      <p class="overline">Carnet d'outils d'études</p>
+      <h1>Tes apps d'études,<br><em>réunies au même endroit.</em></h1>
       <p>Un launcher léger et animé pour regrouper tes outils de travail : OCR de documents, concentration, révision. Installable sur Windows (.exe) et Android (PWA).</p>
     </section>
+
+    <div class="marquee reveal" style="--d:.28s" aria-hidden="true">
+      <div class="marquee-track" id="marquee-track"></div>
+    </div>
 
     <section class="apps-grid" id="apps-grid" aria-label="Applications"></section>
 
     <footer class="footer reveal" style="--d:.5s">
       <span>Lenancker Launcher — projets personnels d'Arthur Lenancker</span>
-      <a href="https://github.com/arthurlenancker-boop/Lenancker_launcher" target="_blank" rel="noopener">Voir le code sur GitHub</a>
+      <a href="https://github.com/arthurlenancker-boop/Lenancker_launcher" target="_blank" rel="noopener">Voir le code sur GitHub ↗</a>
     </footer>
   </main>
 

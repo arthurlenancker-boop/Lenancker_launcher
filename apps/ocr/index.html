@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>OCR Mistral — Lenancker Launcher</title>
   <meta name="description" content="Extrais le texte de tes images et PDF en Markdown grâce à l'API Mistral OCR. Clé API stockée localement.">
-  <meta name="theme-color" content="#0b0d17">
+  <meta name="theme-color" content="#0f0e0b">
   <link rel="icon" type="image/svg+xml" href="../../assets/icons/favicon.svg">
   <link rel="apple-touch-icon" href="../../assets/icons/apple-touch-icon.png">
   <link rel="manifest" href="../../manifest.webmanifest">
@@ -13,26 +13,26 @@
   <link rel="stylesheet" href="ocr.css">
 </head>
 <body>
-  <div class="bg-blobs" aria-hidden="true">
-    <div class="blob blob-1"></div>
-    <div class="blob blob-2"></div>
-    <div class="blob blob-3"></div>
+  <div class="bg" aria-hidden="true">
+    <div class="bg-grid"></div>
+    <div class="bg-glow"></div>
+    <div class="bg-grain"></div>
   </div>
 
   <main class="shell">
     <header class="topbar reveal" style="--d:.05s">
-      <a class="brand" href="../../">
+      <a class="brand" href="../../index.html">
         <span class="brand-logo" aria-hidden="true" id="brand-logo"></span>
-        <span class="brand-name">OCR Mistral<small>Lenancker Launcher</small></span>
+        <span class="brand-name">OCR Mistral<em>lenancker launcher</em></span>
       </a>
-      <a class="btn btn-ghost btn-sm" href="../../">← Launcher</a>
+      <a class="btn btn-ghost btn-sm" href="../../index.html">← Launcher</a>
     </header>
 
     <!-- 1. Clé API -->
     <section class="glass panel reveal" style="--d:.15s" aria-labelledby="h-cle">
       <div class="panel-head">
-        <h2 id="h-cle">Clé API Mistral</h2>
-        <span class="badge" id="key-badge">non configurée</span>
+        <h2 id="h-cle">Clé API <em class="serif-em">Mistral</em></h2>
+        <span class="badge soon-badge" id="key-badge">non configurée</span>
       </div>
       <p class="muted small">
         Ta clé est enregistrée uniquement dans ce navigateur (localStorage) et n'est envoyée
@@ -59,7 +59,7 @@
     <!-- 2. Dépôt de fichiers -->
     <section class="glass panel reveal" style="--d:.25s" aria-labelledby="h-depot">
       <div class="panel-head">
-        <h2 id="h-depot">Documents</h2>
+        <h2 id="h-depot">Documents <em class="serif-em">à analyser</em></h2>
         <span class="small muted">images PNG · JPG · WEBP · GIF ou PDF (50 Mo max)</span>
       </div>
 
@@ -90,12 +90,12 @@
     <!-- 3. Résultats -->
     <section class="reveal" style="--d:.35s" aria-labelledby="h-resultats">
       <div class="row spread" style="margin-bottom:.9rem">
-        <h2 id="h-resultats" style="margin:0;font-size:1.25rem;letter-spacing:-.01em">Résultats</h2>
+        <h2 id="h-resultats" style="margin:0;font-size:1.35rem;letter-spacing:-.015em">Résultats <em class="serif-em" style="color:var(--accent)">markdown</em></h2>
         <button class="btn btn-sm hidden" id="copy-all" type="button">Copier tout le Markdown</button>
       </div>
 
       <div class="empty-state glass" id="empty-results">
-        <p class="muted">Aucun résultat pour le moment. Dépose un document et lance l'OCR : le texte extrait apparaîtra ici en Markdown.</p>
+        <p class="muted">Aucun résultat pour le moment. Dépose un document et lance l'OCR : le texte extrait apparaîtra ici en <em class="serif-em">Markdown</em>.</p>
       </div>
 
       <div class="results" id="results"></div>
@@ -103,7 +103,7 @@
 
     <footer class="footer reveal" style="--d:.45s">
       <span>OCR Mistral — modèle <code class="mono">mistral-ocr-latest</code></span>
-      <a href="../../">Retour au launcher</a>
+      <a href="../../index.html">Retour au launcher</a>
     </footer>
   </main>
 

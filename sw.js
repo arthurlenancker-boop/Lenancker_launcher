@@ -17,6 +17,8 @@ const CORE = [
   'assets/fonts/inter-600.woff2',
   'assets/fonts/inter-700.woff2',
   'assets/fonts/inter-800.woff2',
+  'assets/fonts/instrument-serif-400.woff2',
+  'assets/fonts/instrument-serif-400-italic.woff2',
   'assets/icons/favicon.svg',
   'assets/icons/icon-192.png',
   'assets/icons/icon-512.png',

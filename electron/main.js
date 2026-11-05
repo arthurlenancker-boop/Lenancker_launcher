@@ -14,7 +14,7 @@ function createWindow() {
     height: 820,
     minWidth: 920,
     minHeight: 640,
-    backgroundColor: '#0b0d17',
+    backgroundColor: '#0f0e0b',
     autoHideMenuBar: true,
     title: 'Lenancker Launcher',
     icon: path.join(webRoot, 'assets', 'icons', 'icon-512.png'),
