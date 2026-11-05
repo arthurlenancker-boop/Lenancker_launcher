@@ -117,6 +117,10 @@ code.mono, .mono code { font-size: 0.85em; }
 }
 .result-head .rname { font-weight: 700; font-size: 0.95rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .result-head .rpages { font-size: 0.72rem; color: var(--ink-faint); flex: none; }
+.rscore { font-size: 0.72rem; font-weight: 700; flex: none; padding: 0.16rem 0.55rem; border-radius: 999px; }
+.rscore.ok { color: var(--ok); background: rgba(123, 196, 127, 0.13); }
+.rscore.warn { color: var(--warn); background: rgba(232, 179, 75, 0.13); }
+.rscore.err { color: var(--err); background: rgba(229, 96, 79, 0.15); }
 .seg { display: inline-flex; background: rgba(0, 0, 0, 0.35); border: 1px solid var(--stroke-soft); border-radius: 999px; padding: 3px; gap: 3px; }
 .seg button {
   border: none; background: transparent; color: var(--ink-dim);

@@ -49,35 +49,81 @@
   };
   els.brand.innerHTML = window.iconSvg('timer');
 
-  /* ---------- Stockage local fiable ----------
-     localStorage dépend du navigateur : fenêtre privée = vidé à la fermeture,
-     origine différente (site / localhost / exe) = données séparées.
-     On détecte l'indisponibilité au lieu d'échouer en silence. */
-  let storageOk = true;
+  /* ---------- Stockage en cascade (implémentation : common.js) ----------
+     Le localStorage dépend du contexte de navigation : navigation privée,
+     données de site bloquées, ou base du navigateur verrouillée au lancement
+     (antivirus, seconde instance — souvent transitoire, cf. METAACCESS).
+     On sonde dès l'ouverture plutôt que d'échouer au premier clic, on
+     affiche la cause, et on re-sonde quand la fenêtre redevient visible. */
   const storage = {
-    get(key) {
-      try { return localStorage.getItem(key); } catch { return null; }
-    },
+    get(key) { return window.lenanckerStorage.get(key); },
     set(key, value) {
-      try {
-        localStorage.setItem(key, value);
-        return true;
-      } catch {
-        if (storageOk) {
-          storageOk = false;
-          renderStorageState();
-          window.toast('Stockage local indisponible (fenêtre privée ?) — les points et réglages ne seront pas conservés au rechargement.', 'warn', 8000);
-        }
-        return false;
-      }
+      if (window.lenanckerStorage.set(key, value)) return true;
+      storageRecheck(true); // la panne peut être transitoire : re-sonde tout de suite
+      return false;
     },
   };
-  function renderStorageState() {
-    if (els.storageBadge) {
-      els.storageBadge.hidden = storageOk;
-      if (!storageOk) els.storageBadge.textContent = 'stockage non conservé';
+
+  let lastStorageRecheck = 0;
+  function storageRecheck(force) {
+    const now = Date.now();
+    if (!force && now - lastStorageRecheck < 10000) return;
+    lastStorageRecheck = now;
+    const res = window.lenanckerStorage.recheck();
+    if (res === 'healed') {
+      renderStorageState();
+      renderStats();
+      window.toast('Stockage local rétabli — réglages, points et série sont de nouveau enregistrés.', 'ok', 5200);
+    } else if (res === 'degraded') {
+      renderStorageState();
+      window.toast('Le stockage local vient de lâcher — l\u2019app continue au niveau trouvé. Exporte tes données pour les garder.', 'warn', 7000);
+    } else if (res === 'session') {
+      renderStorageState();
     }
-    if (els.storageInfo) els.storageInfo.classList.toggle('hidden', storageOk);
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') storageRecheck(false);
+  });
+  window.addEventListener('focus', () => storageRecheck(false));
+
+  function renderStorageState() {
+    const mode = window.lenanckerStorage.mode;
+    const bad = mode !== 'local';
+    if (els.storageBadge) {
+      els.storageBadge.hidden = !bad;
+      els.storageBadge.textContent = mode === 'session'
+        ? 'stocké dans cet onglet seulement'
+        : 'stockage bloqué — exporte tes données';
+      els.storageBadge.title = bad
+        ? `Stockage durable indisponible${storageCauseText()}`
+        : '';
+    }
+    if (els.storageInfo) {
+      els.storageInfo.classList.toggle('hidden', !bad);
+      if (bad) {
+        els.storageInfo.innerHTML = mode === 'session'
+          ? modeSessionInfo.innerHTML
+          : modeMemoryInfo.innerHTML;
+      }
+    }
+  }
+
+  const modeSessionInfo = document.createElement('div');
+  modeSessionInfo.textContent =
+    'Le stockage durable est indisponible dans ce contexte (souvent : navigation privée, données de site ' +
+    'bloquées, ou base du navigateur verrouillée par un antivirus ou un second lancement — la fermer puis ' +
+    'rouvrir suffit la plupart du temps). Cet onglet garde tout jusqu\u2019à sa fermeture : exporte tes données ci-dessous pour les conserver.';
+  const modeMemoryInfo = document.createElement('div');
+  modeMemoryInfo.textContent =
+    'Aucun stockage du navigateur n\u2019est disponible ici : tout reste en mémoire et sera perdu au rechargement. ' +
+    'Vérifie que le navigateur autorise les cookies/le stockage de sites pour cette page, ou relance l\u2019application ' +
+    'si la base était verrouillée. Exporte tes données ci-dessous avant de fermer.';
+
+  function storageCauseText() {
+    const c = window.lenanckerStorage.cause;
+    if (!c) return '.';
+    const name = c && c.name ? c.name : 'erreur inconnue';
+    return ` — cause détectée : ${name}.`;
   }
 
   /* ---------- Réglages ---------- */
@@ -579,6 +625,12 @@
     days[FocusCore.dayKey(Date.now())] = true;
     storage.set(LS.days, JSON.stringify(days));
 
+    // marque ces données comme persistantes si le navigateur l'accepte
+    // (limite l'éviction du stockage des PWA installées)
+    if (navigator.storage && navigator.storage.persist) {
+      try { navigator.storage.persist(); } catch { /* pas disponible */ }
+    }
+
     stepStates({ focus: 'done', break: 'done', done: 'active' });
     els.donePoints.textContent = `${s.points} point${s.points > 1 ? 's' : ''}`;
     const min = (ms) => FocusCore.formatMs(ms);
@@ -725,4 +777,9 @@
   presence.render();
   renderStorageState();
   applyRewardUI();
+  if (window.lenanckerStorage.mode !== 'local') {
+    window.toast(window.lenanckerStorage.mode === 'session'
+      ? 'Stockage durable indisponible dans ce contexte — cet onglet garde tout jusqu\u2019à sa fermeture.'
+      : 'Aucun stockage disponible ici — tout sera perdu au rechargement : exporte tes données.', 'warn', 9000);
+  }
 })();

@@ -9,6 +9,7 @@
   const LS_KEY = 'lenancker.ocr.apiKey';
   const LS_IMAGES = 'lenancker.ocr.includeImages';
   const LS_TRIM = 'lenancker.ocr.trimPage';
+  const LS_HF = 'lenancker.ocr.cleanHf';
   const MAX_FILE_BYTES = 50 * 1024 * 1024; // limite API Mistral : 50 Mo
   const WARN_FILE_BYTES = 20 * 1024 * 1024;
 
@@ -42,18 +43,28 @@
     run: $('run-ocr'), clear: $('clear-files'), queueCount: $('queue-count'),
     progressWrap: $('progress-wrap'), progressBar: $('progress-bar'),
     results: $('results'), empty: $('empty-results'), copyAll: $('copy-all'),
-    includeImages: $('include-images'), trimPage: $('trim-page'), pdfAll: $('pdf-all'),
+    includeImages: $('include-images'), trimPage: $('trim-page'), cleanHf: $('clean-hf'), pdfAll: $('pdf-all'),
   };
+  // Préférences persistées via la cascade de stockage (voir common.js) :
+  // indisponible dans certains contextes, sans casser l'app.
+  const store = window.lenanckerStorage;
+
   if (els.includeImages) {
-    els.includeImages.checked = localStorage.getItem(LS_IMAGES) === '1';
+    els.includeImages.checked = store.get(LS_IMAGES) === '1';
     els.includeImages.addEventListener('change', () => {
-      localStorage.setItem(LS_IMAGES, els.includeImages.checked ? '1' : '0');
+      store.set(LS_IMAGES, els.includeImages.checked ? '1' : '0');
     });
   }
   if (els.trimPage) {
-    els.trimPage.checked = localStorage.getItem(LS_TRIM) !== '0'; // détourage actif par défaut
+    els.trimPage.checked = store.get(LS_TRIM) !== '0'; // détourage actif par défaut
     els.trimPage.addEventListener('change', () => {
-      localStorage.setItem(LS_TRIM, els.trimPage.checked ? '1' : '0');
+      store.set(LS_TRIM, els.trimPage.checked ? '1' : '0');
+    });
+  }
+  if (els.cleanHf) {
+    els.cleanHf.checked = store.get(LS_HF) !== '0'; // en-têtes/pieds de page écartés par défaut
+    els.cleanHf.addEventListener('change', () => {
+      store.set(LS_HF, els.cleanHf.checked ? '1' : '0');
     });
   }
   document.getElementById('brand-logo').innerHTML = window.iconSvg('scan');
@@ -204,7 +215,7 @@
   }
 
   /* ---------- Clé API ---------- */
-  function getKey() { return (localStorage.getItem(LS_KEY) || '').trim(); }
+  function getKey() { return (store.get(LS_KEY) || '').trim(); }
 
   function refreshKeyUI() {
     const has = !!getKey();
@@ -221,15 +232,19 @@
   els.saveKey.addEventListener('click', () => {
     const v = els.key.value.trim();
     if (!v) { setKeyStatus('Colle d’abord ta clé API.', 'err'); return; }
-    localStorage.setItem(LS_KEY, v);
-    refreshKeyUI();
-    renderQueue(); // des fichiers peuvent être déjà en file : réactive « Lancer l'OCR »
-    setKeyStatus('Clé enregistrée dans ce navigateur.', 'ok');
-    window.toast('Clé API enregistrée localement.', 'ok');
+    if (store.set(LS_KEY, v)) {
+      refreshKeyUI();
+      renderQueue(); // des fichiers peuvent être déjà en file : réactive « Lancer l'OCR »
+      setKeyStatus('Clé enregistrée dans ce navigateur.', 'ok');
+      window.toast('Clé API enregistrée localement.', 'ok');
+    } else {
+      setKeyStatus('Stockage indisponible — la clé ne survivra pas à la fermeture.', 'err');
+      window.toast('Stockage indisponible (navigateur ?) : la clé ne sera pas conservée après fermeture.', 'warn', 7000);
+    }
   });
 
   els.deleteKey.addEventListener('click', () => {
-    localStorage.removeItem(LS_KEY);
+    store.remove(LS_KEY);
     els.key.value = '';
     refreshKeyUI();
     setKeyStatus('Clé oubliée.', 'warn');
@@ -253,7 +268,7 @@
         const data = await res.json();
         const n = Array.isArray(data.data) ? data.data.length : 0;
         if (key !== getKey()) { // la clé tapée vient d'être validée : on l'enregistre
-          localStorage.setItem(LS_KEY, key);
+          store.set(LS_KEY, key);
           refreshKeyUI();
           renderQueue();
         }
@@ -286,7 +301,7 @@
       if (file.size > WARN_FILE_BYTES) {
         window.toast(`${file.name} est volumineux (${fmtSize(file.size)}) : l’OCR peut prendre du temps.`, 'warn', 5200);
       }
-      queue.push({ id: ++seq, file, kind, status: 'pending', dataUrl: null, markdown: null, pages: 0, images: {}, error: null });
+      queue.push({ id: ++seq, file, kind, status: 'pending', dataUrl: null, markdown: null, pages: 0, images: {}, imageDims: {}, confScore: null, error: null });
       added++;
     }
     if (added) renderQueue();
@@ -411,14 +426,19 @@
   els.clear.addEventListener('click', () => { queue = []; renderQueue(); });
 
   /* ---------- Préparation du Markdown ---------- */
-  /* Enveloppe le LaTeX nu (_ {...} / ^ {...}) de $...$ pour KaTeX,
-     sans toucher aux blocs de code ni au contenu déjà en $...$. */
+  /* Enveloppe le LaTeX nu de $...$ pour KaTeX : _{...} et ^{...}, plus les
+     indices et exposants simples (x_1, f^2). Sans toucher aux blocs ```...```,
+     au code inline `...` ni au contenu déjà en $...$. */
   function wrapBareScripts(text) {
-    return text.split(/(\$[^$]+\$)/g).map((seg, i) => {
+    return text.split(/(```[\s\S]*?```|\$[^$]+\$|`[^`\n]*`)/g).map((seg, i) => {
       if (i % 2 === 1) return seg;
       return seg
+        .replace(/(?<!\\)\^\{([^}]+)\}/g, '$^{$1}$')
         .replace(/(?<!\\)_\{([^}]+)\}/g, '$_{$1}$')
-        .replace(/(?<!\\)\^\{([^}]+)\}/g, '$^{$1}$');
+        // x^2, u_1 : un seul caractère chiffre/minuscule après ^ ou _ — pas
+        // les identifiants type MOT_A ou LOG_LEVEL
+        .replace(/(?<!\\)([\w)\]])\^([0-9a-z])(?![0-9a-zA-Z^(])/g, '$1$^{$2}$')
+        .replace(/(?<!\\)([\w)\]])_([0-9a-z])(?![0-9a-zA-Z^(])/g, '$1$_{$2}$');
     }).join('');
   }
 
@@ -428,9 +448,8 @@
     if (images && Object.keys(images).length) {
       out = out.replace(/!\[([^\]]+)\]\([^)]*\)/g, (m, alt) => (images[alt] ? `![${alt}](${images[alt]})` : m));
     }
-    // hors blocs de code ```...``` : LaTeX nu -> $...$
-    const parts = out.split(/(```[\s\S]*?```)/g);
-    return parts.map((p, i) => (i % 2 === 1 ? p : wrapBareScripts(p))).join('');
+    // LaTeX nu -> $...$, hors zones protégées (blocs de code, code inline, déjà-math)
+    return wrapBareScripts(out);
   }
 
   const KATEX_OPTS = {
@@ -459,10 +478,24 @@
 
   /* ---------- Appel API Mistral OCR ---------- */
   async function callOcr(item, key, attempt) {
-    const includeImages = localStorage.getItem(LS_IMAGES) === '1';
+    const includeImages = store.get(LS_IMAGES) === '1';
     const document = item.kind === 'image'
       ? { type: 'image_url', image_url: item.dataUrl }
       : { type: 'document_url', document_url: item.dataUrl };
+
+    const body = {
+      model: MODEL,
+      document,
+      include_image_base64: includeImages,
+      include_blocks: true, // bbox des blocs (px de l'image) pour le PDF à texte sélectionnable
+      // qualité : score de reconnaissance renvoyé pour chaque page
+      confidence_scores_granularity: 'page',
+    };
+    if (els.cleanHf && els.cleanHf.checked) {
+      // textes répétitifs de page (numéros, mentions) sortis du markdown
+      body.extract_header = true;
+      body.extract_footer = true;
+    }
 
     const res = await fetch(API_URL, {
       method: 'POST',
@@ -470,12 +503,7 @@
         'Authorization': `Bearer ${key}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model: MODEL,
-        document,
-        include_image_base64: includeImages,
-        include_blocks: true, // bbox des blocs (px de l'image) pour le PDF à texte sélectionnable
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!res.ok) {
@@ -496,16 +524,28 @@
     item.markdown = pages.map((p) => p.markdown || '').join('\n\n').trim();
     item.pages = data.usage_info?.pages_processed ?? pages.length;
     item.images = {};
-    if (includeImages) {
-      for (const p of pages) {
-        for (const img of p.images || []) {
-          if (!img.id || !img.image_base64) continue;
+    item.imageDims = {};
+    for (const p of pages) {
+      for (const img of p.images || []) {
+        if (!img.id) continue;
+        // bbox de l'image → rapport largeur/hauteur réel pour l'export .docx
+        const w = Number(img.bottom_right_x) - Number(img.top_left_x);
+        const h = Number(img.bottom_right_y) - Number(img.top_left_y);
+        if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
+          item.imageDims[img.id] = { w, h };
+        }
+        if (includeImages && img.image_base64) {
           const ext = String(img.id).split('.').pop().toLowerCase();
           const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
           item.images[img.id] = `data:${mime};base64,${img.image_base64}`;
         }
       }
     }
+    // fiabilité : moyenne renvoyée par l'API, la page la moins sûre gouverne
+    const scores = pages
+      .map((p) => Number(p.confidence_scores && p.confidence_scores.average_page_confidence_score))
+      .filter(Number.isFinite);
+    item.confScore = scores.length ? Math.min(...scores) : null;
     if (!item.markdown) throw new Error('Réponse vide de l’API OCR.');
 
     // Blocs OCR (bbox en px de l'image) pour le calque texte du PDF exportable
@@ -739,6 +779,9 @@
           item.status = 'ok';
           item.dataUrl = null; // libère le base64 en mémoire (jusqu'à ~67 Mo par PDF)
           window.toast(`OCR terminé : ${item.file.name}`, 'ok');
+          if (Number.isFinite(item.confScore) && item.confScore !== null && item.confScore < 0.7) {
+            window.toast(`${item.file.name} : reconnaissance peu fiable (${Math.round(item.confScore * 100)} %) — relis le texte extrait.`, 'warn', 6500);
+          }
         } catch (err) {
           item.status = 'err';
           item.error = friendlyError(err);
@@ -790,6 +833,18 @@
     pages.className = 'rpages';
     pages.textContent = item.kind !== 'image' && item.pages > 1 ? `${item.pages} pages` : '';
 
+    // fiabilité de reconnaissance telle que renvoyée par l'API
+    let scoreSpan = null;
+    if (Number.isFinite(item.confScore) && item.confScore !== null && item.confScore >= 0) {
+      const pct = Math.round(item.confScore * 100);
+      scoreSpan = document.createElement('span');
+      scoreSpan.className = `rscore ${pct >= 85 ? 'ok' : pct >= 70 ? 'warn' : 'err'}`;
+      scoreSpan.textContent = `${pct} % fiable`;
+      scoreSpan.title = pct >= 70
+        ? 'Fiabilité de la page la moins sûre du document (score renvoyé par l\u2019API Mistral)'
+        : 'Page la moins sûre du document (score de reconnaissance renvoyé par l\u2019API Mistral) : relis ce texte';
+    }
+
     const seg = document.createElement('span');
     seg.className = 'seg';
     const btnPreview = document.createElement('button');
@@ -825,7 +880,7 @@
       btnDocx.disabled = true; btnDocx.classList.add('loading');
       try {
         await ensureDocx();
-        const blob = await window.Md2Docx.mdToDocxBlob(item.markdown, item.file.name, item.images);
+        const blob = await window.Md2Docx.mdToDocxBlob(item.markdown, item.file.name, item.images, item.imageDims);
         downloadBlob(`${base}.ocr.docx`, blob);
         window.toast('Document Word .docx téléchargé — éditable dans Word / LibreOffice.', 'ok');
       } catch (e) {
@@ -857,7 +912,9 @@
       }
     });
 
-    head.append(name, pages, seg, btnCopy, btnHtml, btnDl, btnDocx);
+    head.append(name, pages);
+    if (scoreSpan) head.append(scoreSpan);
+    head.append(seg, btnCopy, btnHtml, btnDl, btnDocx);
     if (item.kind === 'image') head.append(btnPdf);
 
     const body = document.createElement('div');

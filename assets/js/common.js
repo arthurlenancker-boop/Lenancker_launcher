@@ -11,6 +11,110 @@
   };
   window.iconSvg = (name) => ICONS[name] || ICONS.grid;
 
+  /* --- Stockage en cascade : localStorage → sessionStorage → mémoire ---
+     Le localStorage peut être indisponible dans certains contextes :
+     navigation privée, données de site bloquées, leveldb verrouillé par un
+     antivirus ou une seconde instance au moment du lancement, quota…
+     On sonde au démarrage plutôt qu'attendre le premier clic qui échoue,
+     on garde l'app pleinement utilisable au niveau trouvé, et on re-sonde
+     aux regains d'activité : une panne leveldb est souvent transitoire. */
+  const lenanckerMemory = new Map();
+  let lenanckerLastErr = null;
+  function lenanckerProbe(store) {
+    try {
+      const k = '__lenancker.probe__';
+      store.setItem(k, '1');
+      store.removeItem(k);
+      return true;
+    } catch (e) {
+      lenanckerLastErr = e;
+      return false;
+    }
+  }
+  function promoteMirrorTo(store) {
+    try {
+      for (const [k, v] of lenanckerMemory) {
+        try { store.setItem(k, v); } catch { /* promotion au mieux */ }
+      }
+    } catch { /* promotion au mieux */ }
+  }
+  window.lenanckerStorage = {
+    mode: 'local', // 'local' | 'session' | 'memory'
+    cause: null,
+
+    init() {
+      lenanckerLastErr = null;
+      if (lenanckerProbe(window.localStorage)) { this.mode = 'local'; this.cause = null; }
+      else if (lenanckerProbe(window.sessionStorage)) { this.mode = 'session'; this.cause = lenanckerLastErr; }
+      else { this.mode = 'memory'; this.cause = lenanckerLastErr; }
+      return this.mode;
+    },
+
+    backing() {
+      if (this.mode === 'local') return window.localStorage;
+      if (this.mode === 'session') return window.sessionStorage;
+      return null;
+    },
+
+    get(key) {
+      const b = this.backing();
+      if (b) {
+        try {
+          // toute lecture réussie alimente le miroir : il devient, à tout
+          // instant, l'état le plus complet connu de la page
+          const v = b.getItem(key);
+          if (v !== null) { lenanckerMemory.set(key, v); return v; }
+        } catch { /* panneau illisible : miroir */ }
+      }
+      return lenanckerMemory.has(key) ? lenanckerMemory.get(key) : null;
+    },
+
+    set(key, value) {
+      lenanckerMemory.set(key, String(value)); // miroir : survit aux changements de niveau
+      const b = this.backing();
+      if (!b) return false;
+      try { b.setItem(key, value); return true; }
+      catch { return false; }
+    },
+
+    remove(key) {
+      lenanckerMemory.delete(key);
+      const b = this.backing();
+      if (!b) return;
+      try { b.removeItem(key); } catch { /* rien à faire */ }
+    },
+
+    /* Re-sonde. Le miroir a suivi toutes les lectures et écritures de la
+       page : le promouvoir vers le niveau retrouvé réconcile sans perte
+       dans le scénario courant (leveldb verrouillé puis relâché). */
+    recheck() {
+      // le niveau courant vient-il de baisser ?
+      if (this.mode === 'local' && !lenanckerProbe(window.localStorage)) {
+        const why = lenanckerLastErr;
+        if (lenanckerProbe(window.sessionStorage)) {
+          this.mode = 'session'; this.cause = why;
+          promoteMirrorTo(window.sessionStorage);
+          return 'degraded';
+        }
+        this.mode = 'memory'; this.cause = why;
+        return 'degraded';
+      }
+      // un niveau supérieur redevient-il utilisable ?
+      if (this.mode !== 'local' && lenanckerProbe(window.localStorage)) {
+        this.mode = 'local'; this.cause = null;
+        promoteMirrorTo(window.localStorage);
+        return 'healed';
+      }
+      if (this.mode === 'memory' && lenanckerProbe(window.sessionStorage)) {
+        this.mode = 'session'; this.cause = lenanckerLastErr;
+        promoteMirrorTo(window.sessionStorage);
+        return 'session';
+      }
+      return this.mode;
+    },
+  };
+  window.lenanckerStorage.init();
+
   /* --- Toasts --- */
   function ensureZone() {
     let zone = document.querySelector('.toast-zone');

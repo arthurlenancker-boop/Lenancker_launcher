@@ -42,30 +42,44 @@
     return bytes;
   }
 
+  /* Taille ImageRun (px) : conserve le rapport largeur/hauteur réel quand la
+     bbox de l'image est connue (renvoyée par l'API OCR), borné pour tenir
+     dans une page Word. Sans bbox : repli 420x315. */
+  function fitImageSize(dims) {
+    const maxW = 460, maxH = 520;
+    const w = dims ? Number(dims.w) : NaN;
+    const h = dims ? Number(dims.h) : NaN;
+    if (Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0) {
+      const k = Math.min(maxW / w, maxH / h, 1.5);
+      return { width: Math.max(16, Math.round(w * k)), height: Math.max(16, Math.round(h * k)) };
+    }
+    return { width: 420, height: 315 };
+  }
+
   /* Convertit les tokens inline marked en TextRun docx. */
-  function inlineToRuns(tokens, style, images) {
+  function inlineToRuns(tokens, style, images, imageDims) {
     const runs = [];
     const st = style || {};
     for (const t of tokens || []) {
       switch (t.type) {
         case 'text':
-          if (t.tokens) runs.push(...inlineToRuns(t.tokens, st, images));
+          if (t.tokens) runs.push(...inlineToRuns(t.tokens, st, images, imageDims));
           else runs.push(...textToRuns(t.text, st));
           break;
         case 'strong':
-          runs.push(...inlineToRuns(t.tokens, { ...st, bold: true }, images));
+          runs.push(...inlineToRuns(t.tokens, { ...st, bold: true }, images, imageDims));
           break;
         case 'em':
-          runs.push(...inlineToRuns(t.tokens, { ...st, italics: true }, images));
+          runs.push(...inlineToRuns(t.tokens, { ...st, italics: true }, images, imageDims));
           break;
         case 'del':
-          runs.push(...inlineToRuns(t.tokens, { ...st, strike: true }, images));
+          runs.push(...inlineToRuns(t.tokens, { ...st, strike: true }, images, imageDims));
           break;
         case 'codespan':
           runs.push(new docx.TextRun({ text: t.text, ...st, font: 'Consolas' }));
           break;
         case 'link': {
-          const label = t.tokens ? inlineToRuns(t.tokens, { ...st, color: 'FF5310', underline: { type: 'single' } }, images) : [new docx.TextRun({ text: t.text || t.href, ...st })];
+          const label = t.tokens ? inlineToRuns(t.tokens, { ...st, color: 'FF5310', underline: { type: 'single' } }, images, imageDims) : [new docx.TextRun({ text: t.text || t.href, ...st })];
           runs.push(...label);
           break;
         }
@@ -76,7 +90,7 @@
             const ext = (id.split('.').pop() || 'jpeg').toLowerCase();
             runs.push(new docx.ImageRun({
               data: dataUrlToBytes(dataUrl),
-              transformation: { width: 420, height: 315 },
+              transformation: fitImageSize(imageDims && imageDims[id]),
               type: ext === 'png' ? 'png' : 'jpg',
             }));
           } else {
@@ -101,7 +115,7 @@
   }
 
   /* Convertit les tokens block marked en éléments docx (Paragraph / Table). */
-  function blocksToElements(tokens, level, quote, images) {
+  function blocksToElements(tokens, level, quote, images, imageDims) {
     const lv = level || 0;
     const quoteStyle = quote ? {
       indent: { left: 720 },
@@ -113,12 +127,12 @@
         case 'heading':
           els.push(new docx.Paragraph({
             heading: docx.HeadingLevel[HEADING_KEYS[Math.min(6, t.depth) - 1]],
-            children: inlineToRuns(t.tokens, null, images),
+            children: inlineToRuns(t.tokens, null, images, imageDims),
             ...quoteStyle,
           }));
           break;
         case 'paragraph':
-          els.push(new docx.Paragraph({ children: inlineToRuns(t.tokens, null, images), ...quoteStyle }));
+          els.push(new docx.Paragraph({ children: inlineToRuns(t.tokens, null, images, imageDims), ...quoteStyle }));
           break;
         case 'list': {
           t.items.forEach((item, i) => {
@@ -131,19 +145,19 @@
               else if (it.type === 'paragraph') inlineToks.push(...(it.tokens || []));
               else subBlocks.push(it);
             }
-            const runs = inlineToRuns(inlineToks, null, images);
+            const runs = inlineToRuns(inlineToks, null, images, imageDims);
             if (t.ordered) runs.unshift(new docx.TextRun({ text: `${i + 1}. `, bold: false }));
             els.push(new docx.Paragraph({
               children: runs,
               ...(t.ordered ? {} : { bullet: { level: Math.min(8, lv) } }),
               ...(lv > 0 ? { indent: { left: 720 * (lv + 1) } } : {}),
             }));
-            if (subBlocks.length) els.push(...blocksToElements(subBlocks, lv + 1, false, images));
+            if (subBlocks.length) els.push(...blocksToElements(subBlocks, lv + 1, false, images, imageDims));
           });
           break;
         }
         case 'table': {
-          const cellToPar = (cell) => new docx.Paragraph({ children: inlineToRuns(cell.tokens) });
+          const cellToPar = (cell) => new docx.Paragraph({ children: inlineToRuns(cell.tokens, null, images, imageDims) });
           const rows = [];
           if (t.header && t.header.length) {
             rows.push(new docx.TableRow({
@@ -173,7 +187,7 @@
           break;
         }
         case 'blockquote':
-          els.push(...blocksToElements(t.tokens, lv, true, images));
+          els.push(...blocksToElements(t.tokens, lv, true, images, imageDims));
           break;
         case 'hr':
           els.push(new docx.Paragraph({
@@ -192,13 +206,13 @@
     return els;
   }
 
-  function buildDocument(md, title, images) {
+  function buildDocument(md, title, images, imageDims) {
     const tokens = marked.lexer(String(md || ''));
     return new docx.Document({
       creator: 'Lenancker Launcher — OCR Mistral',
       title: title || 'Document OCR',
       description: 'Texte extrait par OCR (mistral-ocr-latest) via le Lenancker Launcher.',
-      sections: [{ children: blocksToElements(tokens, 0, false, images) }],
+      sections: [{ children: blocksToElements(tokens, 0, false, images, imageDims) }],
     });
   }
 
@@ -206,13 +220,14 @@
     buildDocument,
     blocksToElements,
     inlineToRuns,
+    fitImageSize,
     /* Navigateur : renvoie un Blob .docx prêt à télécharger. */
-    async mdToDocxBlob(md, title, images) {
-      return docx.Packer.toBlob(buildDocument(md, title, images));
+    async mdToDocxBlob(md, title, images, imageDims) {
+      return docx.Packer.toBlob(buildDocument(md, title, images, imageDims));
     },
     /* Node (tests) : renvoie un Buffer. */
-    async mdToDocxBuffer(md, title, images) {
-      return docx.Packer.toBuffer(buildDocument(md, title, images));
+    async mdToDocxBuffer(md, title, images, imageDims) {
+      return docx.Packer.toBuffer(buildDocument(md, title, images, imageDims));
     },
   };
 });
