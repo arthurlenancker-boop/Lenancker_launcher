@@ -162,11 +162,12 @@
 
           <div id="focus-view">
             <div class="row" style="margin-top:0.8rem">
-              <button class="btn btn-primary" id="btn-cut" type="button">Le flow est cassé → pause</button>
-              <button class="btn btn-ghost" id="btn-dist" type="button" title="TCC : noter la distraction pour s'en détacher">J'ai été distrait·e</button>
+              <button class="btn btn-primary" id="btn-cut" type="button" title="Raccourci : Espace">Le flow est cassé → pause</button>
+              <button class="btn btn-ghost" id="btn-dist" type="button" title="Raccourci : D — noter la distraction pour s'en détacher">J'ai été distrait·e</button>
               <button class="btn btn-ghost" id="btn-finish-early" type="button">Terminer</button>
             </div>
             <p class="small muted" id="cut-hint">Attends que le flow casse vraiment : si tu es dedans, continue.</p>
+            <p class="small muted kbd-hint">Raccourcis : <kbd>Espace</kbd> pause / reprendre · <kbd>D</kbd> distraction</p>
           </div>
 
           <div id="break-view" class="hidden">
@@ -193,7 +194,11 @@
         <p class="muted small" id="done-reward-lead">Maintenant, ta récompense :</p>
         <p class="serif-em reward-line" id="done-reward"></p>
         <div class="row">
-          <button class="btn btn-primary btn-sm hidden" id="btn-reward-timer" type="button">Minuteur 10 min</button>
+          <span class="seg hidden" id="reward-timers" role="group" aria-label="Minuteur de récompense">
+            <button type="button" data-min="5">5 min</button>
+            <button type="button" data-min="10">10 min</button>
+            <button type="button" data-min="15">15 min</button>
+          </span>
           <button class="btn btn-ghost btn-sm" id="btn-again" type="button">Nouvelle session</button>
         </div>
         <p class="hidden mono big-time reward-time" id="reward-time"></p>

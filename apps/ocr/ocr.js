@@ -14,10 +14,16 @@
 
   const SUPPORTED = {
     'image/png': 'image', 'image/jpeg': 'image', 'image/webp': 'image', 'image/gif': 'image',
-    'application/pdf': 'pdf',
+    'image/avif': 'image',
+    'application/pdf': 'document',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'document',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'document',
   };
   const EXT_FALLBACK = {
-    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', pdf: 'application/pdf',
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif',
+    avif: 'image/avif', pdf: 'application/pdf',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   };
 
   /* ---------- État ---------- */
@@ -217,6 +223,7 @@
     if (!v) { setKeyStatus('Colle d’abord ta clé API.', 'err'); return; }
     localStorage.setItem(LS_KEY, v);
     refreshKeyUI();
+    renderQueue(); // des fichiers peuvent être déjà en file : réactive « Lancer l'OCR »
     setKeyStatus('Clé enregistrée dans ce navigateur.', 'ok');
     window.toast('Clé API enregistrée localement.', 'ok');
   });
@@ -245,8 +252,13 @@
       if (res.ok) {
         const data = await res.json();
         const n = Array.isArray(data.data) ? data.data.length : 0;
-        setKeyStatus(`Clé valide — ${n} modèle(s) accessibles.`, 'ok');
-        window.toast('Clé API valide.', 'ok');
+        if (key !== getKey()) { // la clé tapée vient d'être validée : on l'enregistre
+          localStorage.setItem(LS_KEY, key);
+          refreshKeyUI();
+          renderQueue();
+        }
+        setKeyStatus(`Clé valide et enregistrée — ${n} modèle(s) accessibles.`, 'ok');
+        window.toast('Clé API valide et enregistrée.', 'ok');
       } else {
         setKeyStatus(`Échec du test (HTTP ${res.status}).`, 'err');
         window.toast(`Test de la clé : HTTP ${res.status}`, 'err');
@@ -283,10 +295,12 @@
   function renderQueue() {
     els.queueList.innerHTML = '';
     let pending = 0;
-    for (const item of queue) {
+    for (const [index, item] of queue.entries()) {
       if (item.status === 'pending' || item.status === 'err') pending++;
       const li = document.createElement('li');
       li.className = 'file-item';
+      if (item.status === 'err' && item.error) li.title = item.error;
+      else if (item.status === 'ok' && item.pages > 1) li.title = `${item.pages} page(s) traitée(s)`;
 
       const name = document.createElement('span');
       name.className = 'fname'; name.textContent = item.file.name; name.title = item.file.name;
@@ -298,6 +312,16 @@
       status.className = `fstatus ${item.status === 'working' ? 'working' : item.status}`;
       status.textContent = statusLabel(item);
 
+      const move = (dir, label, glyph) => {
+        const b = document.createElement('button');
+        b.className = 'fmove'; b.type = 'button'; b.textContent = glyph;
+        b.title = label;
+        const other = index + dir;
+        b.disabled = running || other < 0 || other >= queue.length;
+        b.addEventListener('click', () => moveItem(item, dir));
+        return b;
+      };
+
       const remove = document.createElement('button');
       remove.className = 'fremove'; remove.type = 'button'; remove.textContent = '✕';
       remove.title = 'Retirer de la liste';
@@ -307,12 +331,37 @@
         renderQueue();
       });
 
-      li.append(name, size, status, remove);
+      li.append(name, size, status, move(-1, 'Monter dans la file', '↑'), move(1, 'Descendre dans la file', '↓'), remove);
       els.queueList.appendChild(li);
     }
     els.queueCount.textContent = queue.length ? `${queue.length} fichier(s)` : '';
     els.run.disabled = !pending || running || !getKey();
     els.clear.disabled = !queue.length || running;
+  }
+
+  /* L'ordre de la file commande l'analyse, le PDF combiné et la copie globale.
+     Les cartes de résultats suivent donc le même ordre. */
+  function moveItem(item, dir) {
+    const i = queue.indexOf(item);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= queue.length) return;
+    [queue[i], queue[j]] = [queue[j], queue[i]];
+    renderQueue();
+    syncResultsOrder();
+  }
+
+  function syncResultsOrder() {
+    const cards = Array.from(els.results.children);
+    if (!cards.length) return;
+    const byId = new Map(cards.map((c) => [c.dataset.qid, c]));
+    for (const item of queue) {
+      const c = byId.get(String(item.id));
+      if (c) els.results.appendChild(c);
+    }
+    // cartes orphelines (fichier retiré de la file) : gardées, en fin
+    for (const c of cards) {
+      if (!queue.some((q) => String(q.id) === c.dataset.qid)) els.results.appendChild(c);
+    }
   }
 
   function statusLabel(item) {
@@ -411,9 +460,9 @@
   /* ---------- Appel API Mistral OCR ---------- */
   async function callOcr(item, key, attempt) {
     const includeImages = localStorage.getItem(LS_IMAGES) === '1';
-    const document = item.kind === 'pdf'
-      ? { type: 'document_url', document_url: item.dataUrl }
-      : { type: 'image_url', image_url: item.dataUrl };
+    const document = item.kind === 'image'
+      ? { type: 'image_url', image_url: item.dataUrl }
+      : { type: 'document_url', document_url: item.dataUrl };
 
     const res = await fetch(API_URL, {
       method: 'POST',
@@ -739,7 +788,7 @@
 
     const pages = document.createElement('span');
     pages.className = 'rpages';
-    pages.textContent = item.kind === 'pdf' && item.pages > 1 ? `${item.pages} pages` : '';
+    pages.textContent = item.kind !== 'image' && item.pages > 1 ? `${item.pages} pages` : '';
 
     const seg = document.createElement('span');
     seg.className = 'seg';

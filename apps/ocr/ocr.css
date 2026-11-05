@@ -77,6 +77,13 @@ code.mono, .mono code { font-size: 0.85em; }
   transition: color 0.2s, background 0.2s;
 }
 .file-item .fremove:hover { color: var(--err); background: rgba(229, 96, 79, 0.12); }
+.file-item .fmove {
+  flex: none; border: none; background: transparent; color: var(--ink-faint);
+  cursor: pointer; font-size: 0.85rem; line-height: 1; padding: 0.2rem 0.3rem; border-radius: 6px;
+  transition: color 0.2s, background 0.2s;
+}
+.file-item .fmove:hover:not(:disabled) { color: var(--accent); background: rgba(255, 83, 16, 0.12); }
+.file-item .fmove:disabled { opacity: 0.3; cursor: default; }
 
 /* --- Progress --- */
 .progress {

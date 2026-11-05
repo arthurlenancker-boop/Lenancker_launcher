@@ -40,7 +40,7 @@
     breakPomHint: $('break-pom-hint'),
     doneCard: $('done-card'), doneStats: $('done-stats'), donePoints: $('done-points'),
     doneRewardLead: $('done-reward-lead'), doneReward: $('done-reward'),
-    btnRewardTimer: $('btn-reward-timer'), rewardTime: $('reward-time'), btnRewardDone: $('btn-reward-done'),
+    rewardTimers: $('reward-timers'), rewardTime: $('reward-time'), btnRewardDone: $('btn-reward-done'),
     again: $('btn-again'),
     weekChart: $('week-chart'),
     statTotal: $('stat-total'), statStreak: $('stat-streak'), statSessions: $('stat-sessions'), statPoints: $('stat-points'),
@@ -85,12 +85,13 @@
     mode: 'flux', fluxMin: 10, fluxMax: 45,
     pomFocus: 25, pomBreak: 5, pomCycles: 4,
     noise: 'none', noiseVol: 0.35, sounds: 'soft',
-    fidget: true, reduceAnim: false,
+    fidget: true, reduceAnim: false, rewardMin: 10,
   };
   let settings = Object.assign({}, defaults);
   try {
     settings = Object.assign(defaults, JSON.parse(storage.get(LS.settings) || '{}'));
   } catch { /* réglages corrompus : valeurs par défaut */ }
+  if (![5, 10, 15].includes(settings.rewardMin)) settings.rewardMin = 10;
 
   function persistSettings() {
     storage.set(LS.settings, JSON.stringify(settings));
@@ -317,6 +318,9 @@
       wrap.append(bar, lab);
       els.weekChart.appendChild(wrap);
     });
+    // lecteurs d'écran : le contenu du graphique, pas seulement son rôle
+    const summary = week.map((d) => `${d.key} : ${Math.round(d.focusMs / MIN)} min`).join(', ');
+    els.weekChart.setAttribute('aria-label', `Minutes de focus des 7 derniers jours — ${summary}`);
 
     els.statTotal.textContent = totalMs >= 60 * MIN
       ? `${Math.round(totalMs / MIN / 60 * 10) / 10} h`
@@ -369,6 +373,7 @@
     if (['none', 'soft', 'tick'].includes(inc.sounds)) out.sounds = inc.sounds;
     if (typeof inc.fidget === 'boolean') out.fidget = inc.fidget;
     if (typeof inc.reduceAnim === 'boolean') out.reduceAnim = inc.reduceAnim;
+    if ([5, 10, 15].includes(Number(inc.rewardMin))) out.rewardMin = Number(inc.rewardMin);
     return out;
   }
 
@@ -493,7 +498,7 @@
     els.focusView.classList.remove('hidden');
     els.breakView.classList.add('hidden');
     els.doneReward.textContent = intent.reward || '';
-    els.btnRewardTimer.classList.toggle('hidden', !intent.reward);
+    els.rewardTimers.classList.toggle('hidden', !intent.reward);
     els.rewardTime.classList.add('hidden');
     els.btnRewardDone.classList.add('hidden');
 
@@ -587,37 +592,53 @@
     els.doneRewardLead.textContent = intent.reward ? 'Maintenant, ta récompense :' : 'Une idée de récompense (centre d\u2019intérêt) pour la prochaine fois ?';
     showScreen('done');
     renderStats();
+    document.title = 'Focus — Lenancker Launcher';
     window.toast('Session terminée — bilan disponible.', 'ok');
     engine = null;
   }
 
-  /* Minuteur de récompense : 10 min douces, sans pression. */
+  /* Minuteur de récompense : durée au choix, douce, sans pression. */
   let rewardJob = 0;
-  els.btnRewardTimer.addEventListener('click', () => {
+  function applyRewardUI() {
+    els.rewardTimers.querySelectorAll('button').forEach((b) => {
+      const active = Number(b.dataset.min) === settings.rewardMin;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-pressed', String(active));
+    });
+  }
+  function startRewardTimer(mins) {
     if (rewardJob) return;
-    let left = 10 * MIN;
+    const total = mins * MIN;
     els.rewardTime.classList.remove('hidden');
     els.btnRewardDone.classList.remove('hidden');
-    els.rewardTime.textContent = FocusCore.formatMs(left);
-    els.btnRewardTimer.disabled = true;
+    els.rewardTime.textContent = FocusCore.formatMs(total);
     const t0 = Date.now();
     rewardJob = setInterval(() => {
-      left = 10 * MIN - (Date.now() - t0);
+      const left = total - (Date.now() - t0);
       if (left <= 0) {
         clearInterval(rewardJob); rewardJob = 0;
         els.rewardTime.textContent = '00:00';
-        els.btnRewardTimer.disabled = false;
         audio.chime();
         return;
       }
       els.rewardTime.textContent = FocusCore.formatMs(left);
     }, 500);
-  });
+  }
+  if (els.rewardTimers) {
+    els.rewardTimers.querySelectorAll('button').forEach((b) => {
+      b.addEventListener('click', () => {
+        const mins = clampInt(b.dataset.min, 1, 60, settings.rewardMin);
+        settings.rewardMin = mins;
+        persistSettings();
+        applyRewardUI();
+        startRewardTimer(mins);
+      });
+    });
+  }
   els.btnRewardDone.addEventListener('click', () => {
     if (rewardJob) { clearInterval(rewardJob); rewardJob = 0; }
     els.rewardTime.classList.add('hidden');
     els.btnRewardDone.classList.add('hidden');
-    els.btnRewardTimer.disabled = false;
   });
 
   function tickLoop() {
@@ -677,6 +698,24 @@
     showScreen('setup');
   });
 
+  /* ---------- Raccourcis clavier (session en cours) ----------
+     Espace = action principale (pause quand le flow casse / reprendre),
+     D = noter une distraction. Jamais pendant la saisie d'un champ. */
+  window.addEventListener('keydown', (e) => {
+    if (e.ctrlKey || e.altKey || e.metaKey || e.repeat) return;
+    const t = e.target;
+    // si le focus est sur un contrôle, Espace/D doit rester à ce contrôle (a11y)
+    if (t && t.closest && t.closest('input, textarea, select, button, a, [contenteditable], [role="button"]')) return;
+    if (!engine) return;
+    if (e.key === ' ') {
+      e.preventDefault();
+      if (engine.state.phase === 'focus') endFocusSegment(false);
+      else if (engine.state.phase === 'break') resumeFocus();
+    } else if (e.key === 'd' || e.key === 'D') {
+      if (engine.state.phase === 'focus') noteDistraction();
+    }
+  });
+
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
@@ -685,4 +724,5 @@
   renderStats();
   presence.render();
   renderStorageState();
+  applyRewardUI();
 })();
