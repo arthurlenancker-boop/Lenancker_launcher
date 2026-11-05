@@ -1,0 +1,141 @@
+/* Focus — styles spécifiques (complètent design.css) */
+
+.panel { padding: clamp(1.2rem, 3vw, 1.7rem); margin-bottom: 1.4rem; }
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap; margin-bottom: 0.4rem;
+}
+.panel h2 { margin: 0 0 0.35rem; font-size: 1.3rem; letter-spacing: -0.02em; font-weight: 700; }
+.panel h2 .serif-em { color: var(--accent); font-size: 1.15em; }
+.panel > p { margin-top: 0; }
+.grow { flex: 1; min-width: min(100%, 260px); }
+.btn-big { padding: 0.85rem 1.6rem; font-size: 1.02rem; }
+
+/* --- Contrôle segmenté (mode flux / pomodoro) --- */
+.seg {
+  display: inline-flex; gap: 0.3rem; padding: 0.3rem;
+  border: 1px solid var(--stroke-soft); border-radius: 999px;
+  background: rgba(0, 0, 0, 0.3);
+}
+.seg button {
+  appearance: none; border: none; cursor: pointer;
+  background: transparent; color: var(--ink-dim);
+  padding: 0.45rem 0.95rem; border-radius: 999px;
+  font-size: 0.86rem; font-weight: 600;
+  transition: background 0.25s, color 0.25s, transform 0.2s var(--ease);
+}
+.seg button:hover { color: var(--ink); }
+.seg button.active { background: var(--accent); color: var(--on-accent); }
+.seg button.active .muted { color: var(--on-accent); opacity: 0.75; }
+
+/* --- Déroulé visuel (emplois du temps visuels, TEACCH) --- */
+.steps {
+  list-style: none; display: flex; flex-wrap: wrap; gap: 0.4rem;
+  margin: 0 0 1.2rem; padding: 0;
+}
+.steps li {
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink-faint);
+  padding: 0.32rem 0.75rem; border: 1px dashed var(--stroke-soft); border-radius: 999px;
+}
+.steps li::before {
+  content: ''; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--ink-faint); opacity: 0.5; transition: background 0.3s, box-shadow 0.3s;
+}
+.steps li.active { color: var(--ink); border-color: var(--accent); border-style: solid; }
+.steps li.active::before { background: var(--accent); box-shadow: 0 0 10px rgba(255, 83, 16, 0.8); }
+.steps li.done { color: var(--ok); border-color: rgba(123, 196, 127, 0.4); }
+.steps li.done::before { background: var(--ok); opacity: 1; }
+.steps li.done::after { content: '✓'; color: var(--ok); font-size: 0.8rem; }
+
+/* --- Carte session : anneau + panneau latéral --- */
+.session-card { padding: clamp(1.2rem, 3vw, 1.9rem); margin-bottom: 1.4rem; }
+.session-grid {
+  display: grid; grid-template-columns: minmax(220px, 300px) 1fr;
+  gap: clamp(1.2rem, 4vw, 2.4rem); align-items: center;
+}
+@media (max-width: 640px) { .session-grid { grid-template-columns: 1fr; justify-items: center; } }
+
+.ring-wrap { position: relative; width: min(100%, 290px); aspect-ratio: 1; }
+.ring { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring-track { fill: none; stroke: var(--stroke-soft); stroke-width: 7; }
+.ring-fill {
+  fill: none; stroke: var(--accent); stroke-width: 7; stroke-linecap: round;
+  stroke-dasharray: 552.9;  /* 2πr, r = 88 */
+  stroke-dashoffset: 552.9;
+  transition: stroke-dashoffset 0.6s linear;
+  filter: drop-shadow(0 0 9px rgba(255, 83, 16, 0.45));
+}
+.ring-wrap.in-break .ring-fill { stroke: var(--ok); filter: drop-shadow(0 0 9px rgba(123, 196, 127, 0.4)); }
+.ring-wrap.in-hint .ring-fill { stroke: var(--warn); filter: drop-shadow(0 0 9px rgba(232, 179, 75, 0.45)); }
+.ring-center {
+  position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 0.1rem;
+}
+.big-time {
+  font-size: clamp(2.1rem, 6vw, 2.7rem); font-weight: 600; letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.phase-label { font-size: 1.25rem; color: var(--ink-dim); }
+
+.session-side { min-width: 0; width: 100%; }
+.task-line { margin: 0 0 0.25rem; font-style: italic; }
+.task-line strong { color: var(--ink); font-style: normal; }
+#ifthen-reminder { color: var(--warn); margin: 0.2rem 0; }
+.fidget-hint { margin: 0.2rem 0 0; }
+
+.break-title { font-size: 1.35rem; color: var(--ok); margin: 0 0 0.15rem; }
+#break-idea { margin: 0 0 0.3rem; }
+
+/* --- Bilan --- */
+#done-stats { margin: 0.8rem 0 1rem; }
+.stat-line { font-size: 0.92rem; }
+.stat-line b { color: var(--accent); font-variant-numeric: tabular-nums; }
+.reward-box {
+  margin-top: 1rem; padding: 1.2rem 1.4rem;
+  border: 1px solid rgba(255, 83, 16, 0.35); border-radius: var(--r-md);
+  background: var(--accent-soft);
+}
+.reward-line { font-size: 1.5rem; color: var(--ink); margin: 0.1rem 0 0.8rem; }
+.reward-time { font-size: 2rem; margin: 0.6rem 0 0.4rem; }
+
+/* --- Graphique hebdo --- */
+.week-chart {
+  display: flex; align-items: flex-end; gap: 0.5rem;
+  height: 120px; margin-top: 0.6rem;
+}
+.week-day { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 0.35rem; height: 100%; }
+.week-bar {
+  width: 100%; border-radius: 6px 6px 2px 2px; min-height: 3px;
+  background: linear-gradient(180deg, var(--accent), rgba(255, 83, 16, 0.25));
+  transition: height 0.6s var(--ease);
+}
+.week-day .small { text-align: center; color: var(--ink-faint); }
+.week-day.today .week-bar { box-shadow: 0 0 14px rgba(255, 83, 16, 0.35); }
+.week-day.today .small { color: var(--accent); font-weight: 700; }
+
+.stat { display: flex; flex-direction: column; align-items: center; gap: 0.15rem; }
+.stat-val { font-size: 1.35rem; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* --- Range (volume) --- */
+input[type="range"] {
+  appearance: none; -webkit-appearance: none; width: 100%;
+  height: 6px; border-radius: 4px; accent-color: var(--accent);
+  background: linear-gradient(90deg, var(--accent) var(--v, 35%), rgba(242, 239, 231, 0.15) var(--v, 35%));
+  cursor: pointer; padding: 0; margin-top: 0.55rem;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 2px 8px rgba(255, 83, 16, 0.6); border: none;
+}
+
+/* --- Réduire les animations (TEACCH : environnement sensoriel sobre) --- */
+.fx-reduce *,
+.fx-reduce *::before,
+.fx-reduce *::after { animation: none !important; transition: none !important; }
+.fx-reduce .ring-fill { transition: none; }
+.fx-reduce .week-bar { transition: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ring-fill, .week-bar { transition: none; }
+}

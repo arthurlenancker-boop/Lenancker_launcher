@@ -27,7 +27,7 @@ jobs:
       - name: Préparer le site statique
         run: |
           mkdir -p site
-          cp -r index.html manifest.webmanifest sw.js assets apps site/
+          cp -r index.html manifest.webmanifest sw.js assets apps docs site/
 
       - name: Configurer Pages
         uses: actions/configure-pages@v5

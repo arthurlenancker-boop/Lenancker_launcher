@@ -12,13 +12,14 @@ window.LENANCKER_APPS = [
     href: 'apps/ocr/index.html',
   },
   {
-    slug: 'pomodoro',
-    name: 'Pomodoro',
-    desc: "Sessions de concentration chronométrées avec pause automatique et suivi de tes sessions de travail.",
+    slug: 'focus',
+    name: 'Focus',
+    desc: "Sessions de concentration calibrées TDA/H & TSA d'après la littérature scientifique : mode Flux (pause quand le flow casse, jamais d'horloge imposée), temps toujours visible, bruit blanc/rose/marron, pauses actives, body doubling local, plan « si-alors » et récompense liée à ton centre d'intérêt.",
     icon: 'timer',
     tint: 'rgba(232, 179, 75, 0.12)',
     accent: '#e8b34b',
-    status: 'bientôt',
+    status: 'disponible',
+    href: 'apps/focus/index.html',
   },
   {
     slug: 'revision',

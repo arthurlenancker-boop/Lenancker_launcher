@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Focus — Lenancker Launcher</title>
+  <meta name="description" content="Sessions de concentration TDA/H & TSA fondées sur la littérature scientifique : flux auto-régulé, temps visible, bruit blanc, pauses actives, body doubling local.">
+  <meta name="theme-color" content="#0f0e0b">
+  <link rel="icon" type="image/svg+xml" href="../../assets/icons/favicon.svg">
+  <link rel="apple-touch-icon" href="../../assets/icons/apple-touch-icon.png">
+  <link rel="manifest" href="../../manifest.webmanifest">
+  <link rel="stylesheet" href="../../assets/css/design.css">
+  <link rel="stylesheet" href="focus.css">
+</head>
+<body>
+  <div class="bg" aria-hidden="true">
+    <div class="bg-grid"></div>
+    <div class="bg-glow"></div>
+    <div class="bg-grain"></div>
+  </div>
+
+  <main class="shell">
+    <header class="topbar reveal" style="--d:.05s">
+      <a class="brand" href="../../index.html">
+        <span class="brand-logo" aria-hidden="true" id="brand-logo"></span>
+        <span class="brand-name">Focus<em>lenancker launcher</em></span>
+      </a>
+      <a class="btn btn-ghost btn-sm" href="../../index.html">← Launcher</a>
+    </header>
+
+    <!-- 1. Préparer -->
+    <section class="glass panel reveal" style="--d:.15s" id="setup-card" aria-labelledby="h-preparer">
+      <div class="panel-head">
+        <h2 id="h-preparer">Préparer <em class="serif-em">la session</em></h2>
+        <span class="badge" id="presence-setup" hidden>—</span>
+      </div>
+      <p class="muted small">
+        À la différence d'un Pomodoro rigide, ici c'est le <strong>flow</strong> qui décide de la
+        pause — c'est ce que privilégient les études sur la motivation (Smits et al. 2024).
+        Rien n'est bloquant, tout est réglable.
+      </p>
+
+      <div class="field grow" style="margin-block:0.9rem">
+        <label for="task">Sur quoi je travaille</label>
+        <input class="input" id="task" type="text" placeholder="Ex. : terminer la fiche de biologie, lire chap. 4…" autocomplete="off">
+      </div>
+
+      <div class="field">
+        <label>Mode</label>
+        <div class="seg" role="radiogroup" aria-label="Mode de session">
+          <button type="button" class="active" id="mode-flux" aria-pressed="true">Flux <span class="small muted">(recommandé)</span></button>
+          <button type="button" id="mode-pomodoro" aria-pressed="false">Pomodoro 25/5</button>
+        </div>
+        <p class="small muted" id="mode-hint">Pause quand le flow casse, bornes conseillées min/max — rien d'imposé.</p>
+      </div>
+
+      <div class="row" style="gap:1rem 1.6rem;margin-block:0.9rem">
+        <div class="row flux-only" style="gap:1rem">
+          <div class="field" style="width:120px">
+            <label for="flux-min">Minimum (min)</label>
+            <input class="input mono" id="flux-min" type="number" min="1" max="120" step="1" value="10">
+          </div>
+          <div class="field" style="width:120px">
+            <label for="flux-max">Maximum (min)</label>
+            <input class="input mono" id="flux-max" type="number" min="5" max="240" step="5" value="45">
+          </div>
+        </div>
+        <div class="row pom-only hidden" style="gap:1rem">
+          <div class="field" style="width:110px">
+            <label for="pom-focus">Focus (min)</label>
+            <input class="input mono" id="pom-focus" type="number" min="5" max="90" step="5" value="25">
+          </div>
+          <div class="field" style="width:110px">
+            <label for="pom-break">Pause (min)</label>
+            <input class="input mono" id="pom-break" type="number" min="1" max="30" step="1" value="5">
+          </div>
+          <div class="field" style="width:110px">
+            <label for="pom-cycles">Cycles</label>
+            <input class="input mono" id="pom-cycles" type="number" min="1" max="10" step="1" value="4">
+          </div>
+        </div>
+      </div>
+
+      <div class="field" style="margin-bottom:0.7rem">
+        <label for="ifthen">Mon plan « si… alors… » (anti-distraction)</label>
+        <input class="input" id="ifthen" type="text" placeholder="Ex. : si j'attrape mon téléphone, alors je le repose et je note la distraction" autocomplete="off">
+      </div>
+      <div class="field" style="margin-bottom:0.9rem">
+        <label for="reward">Ma récompense après (un centre d'intérêt)</label>
+        <input class="input" id="reward" type="text" placeholder="Ex. : 10 min sur mes trains miniatures" autocomplete="off">
+      </div>
+
+      <div class="row" style="gap:.5rem 1.4rem">
+        <div class="field" style="width:150px">
+          <label for="noise">Bruit de fond</label>
+          <select class="input" id="noise">
+            <option value="none" selected>Aucun</option>
+            <option value="white">Bruit blanc</option>
+            <option value="pink">Bruit rose</option>
+            <option value="brown">Bruit marron</option>
+          </select>
+        </div>
+        <div class="field" style="width:130px">
+          <label for="noise-vol">Volume</label>
+          <input id="noise-vol" type="range" min="0" max="1" step="0.05" value="0.35" aria-label="Volume du bruit de fond">
+        </div>
+        <div class="field" style="width:130px">
+          <label for="sounds">Sons</label>
+          <select class="input" id="sounds">
+            <option value="soft" selected>Doux (fin de phase)</option>
+            <option value="none">Aucun</option>
+            <option value="tick">Tic-tac discret</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <label class="small muted row" style="gap:.45rem;cursor:pointer">
+          <input type="checkbox" id="fidget" checked>
+          Rappel « bouger est permis » (le mouvement aide l'attention, UC Davis 2024)
+        </label>
+        <label class="small muted row" style="gap:.45rem;cursor:pointer">
+          <input type="checkbox" id="reduce-anim">
+          Réduire les animations
+        </label>
+      </div>
+
+      <div class="row" style="margin-top:1.1rem">
+        <button class="btn btn-primary btn-big" id="start-session" type="button">Commencer à me concentrer</button>
+        <span class="small muted" id="setup-hint">Le temps restera visible en permanence — c'est fait pour.</span>
+      </div>
+    </section>
+
+    <!-- 2. Session -->
+    <section class="glass session-card hidden reveal" style="--d:.25s" id="session-card" aria-labelledby="h-session">
+      <ol class="steps" aria-label="Déroulé de la session">
+        <li class="done"><span>Préparer</span></li>
+        <li id="step-focus"><span>Focus</span></li>
+        <li id="step-break"><span>Pause</span></li>
+        <li id="step-done"><span>Récompense</span></li>
+      </ol>
+
+      <div class="session-grid">
+        <div class="ring-wrap" aria-hidden="true">
+          <svg viewBox="0 0 200 200" class="ring">
+            <circle cx="100" cy="100" r="88" class="ring-track" />
+            <circle cx="100" cy="100" r="88" class="ring-fill" id="ring-fill" />
+          </svg>
+          <div class="ring-center">
+            <div class="big-time mono" id="big-time">00:00</div>
+            <div class="phase-label serif-em" id="phase-label">focus</div>
+          </div>
+        </div>
+
+        <div class="session-side">
+          <p class="task-line small muted" id="live-task"></p>
+          <p class="small hidden" id="ifthen-reminder"></p>
+          <p class="small muted fidget-hint" id="fidget-hint">Bouge si tu en as besoin — ça aide à rester attentif·ve.</p>
+          <div class="row" style="gap:.6rem;margin-top:0.6rem">
+            <span class="badge hidden" id="presence-live">—</span>
+            <span class="badge hidden" id="dist-badge">0 distraction</span>
+          </div>
+
+          <div id="focus-view">
+            <div class="row" style="margin-top:0.8rem">
+              <button class="btn btn-primary" id="btn-cut" type="button">Le flow est cassé → pause</button>
+              <button class="btn btn-ghost" id="btn-dist" type="button" title="TCC : noter la distraction pour s'en détacher">J'ai été distrait·e</button>
+              <button class="btn btn-ghost" id="btn-finish-early" type="button">Terminer</button>
+            </div>
+            <p class="small muted" id="cut-hint">Attends que le flow casse vraiment : si tu es dedans, continue.</p>
+          </div>
+
+          <div id="break-view" class="hidden">
+            <p class="serif-em break-title" id="break-title">Pause active</p>
+            <p class="small muted" id="break-idea">Lève-toi et marche 2 minutes.</p>
+            <div class="row" style="margin-top:0.8rem">
+              <button class="btn btn-primary" id="btn-resume" type="button">Reprendre le focus</button>
+              <button class="btn btn-ghost" id="btn-finish" type="button">Terminer la session</button>
+            </div>
+            <p class="small muted hidden" id="break-pom-hint">Reprise automatique à la fin de la pause.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Bilan -->
+    <section class="glass panel hidden reveal" style="--d:.3s" id="done-card" aria-labelledby="h-bilan">
+      <div class="panel-head">
+        <h2 id="h-bilan">Bilan <em class="serif-em">de session</em></h2>
+        <span class="badge" id="done-points">0 points</span>
+      </div>
+      <div class="row" id="done-stats" style="gap:1.4rem"></div>
+      <div class="reward-box">
+        <p class="muted small" id="done-reward-lead">Maintenant, ta récompense :</p>
+        <p class="serif-em reward-line" id="done-reward"></p>
+        <div class="row">
+          <button class="btn btn-primary btn-sm hidden" id="btn-reward-timer" type="button">Minuteur 10 min</button>
+          <button class="btn btn-ghost btn-sm" id="btn-again" type="button">Nouvelle session</button>
+        </div>
+        <p class="hidden mono big-time reward-time" id="reward-time"></p>
+        <button class="btn btn-ghost btn-sm hidden" id="btn-reward-done" type="button">Récompense terminée</button>
+      </div>
+    </section>
+
+    <!-- 4. Consistance -->
+    <section class="glass panel reveal" style="--d:.35s" aria-labelledby="h-stats">
+      <div class="panel-head">
+        <h2 id="h-stats">Ta <em class="serif-em">consistance</em></h2>
+        <span class="small muted">7 derniers jours</span>
+      </div>
+      <div class="week-chart" id="week-chart" role="img" aria-label="Minutes de focus des 7 derniers jours"></div>
+      <div class="row spread" style="margin-top:0.9rem">
+        <div class="stat"><span class="mono stat-val" id="stat-total">0 min</span><span class="small muted">total focus</span></div>
+        <div class="stat"><span class="mono stat-val" id="stat-streak">0</span><span class="small muted">jour(s) de série</span></div>
+        <div class="stat"><span class="mono stat-val" id="stat-sessions">0</span><span class="small muted">sessions</span></div>
+        <div class="stat"><span class="mono stat-val" id="stat-points">0</span><span class="small muted">points (1/min)</span></div>
+      </div>
+    </section>
+
+    <footer class="footer reveal" style="--d:.45s">
+      <span>Focus — fondé sur le brief <a href="../../docs/recherche-focus-tda-tsa.md">recherche TDA/H + TSA</a></span>
+      <a href="../../index.html">Retour au launcher</a>
+    </footer>
+  </main>
+
+  <script src="../../assets/js/common.js" defer></script>
+  <script src="core.js" defer></script>
+  <script src="focus.js" defer></script>
+</body>
+</html>
