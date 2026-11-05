@@ -138,6 +138,9 @@ code.mono, .mono code { font-size: 0.85em; }
 .md-preview img { max-width: 100%; border-radius: var(--r-sm); }
 .md-preview blockquote { border-left: 3px solid var(--accent); margin-left: 0; padding-left: 1rem; color: var(--ink-dim); }
 .md-preview a { color: var(--accent); }
+.md-preview .katex-display { overflow-x: auto; padding-block: 0.4rem; }
+.md-preview .katex { font-size: 1.02em; }
+.md-preview img { border: 1px solid var(--stroke-soft); }
 
 /* --- Spinner bouton --- */
 .btn.loading { pointer-events: none; opacity: 0.85; }

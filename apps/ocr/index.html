@@ -10,6 +10,7 @@
   <link rel="apple-touch-icon" href="../../assets/icons/apple-touch-icon.png">
   <link rel="manifest" href="../../manifest.webmanifest">
   <link rel="stylesheet" href="../../assets/css/design.css">
+  <link rel="stylesheet" href="../../assets/vendor/katex/katex.min.css">
   <link rel="stylesheet" href="ocr.css">
 </head>
 <body>
@@ -78,6 +79,10 @@
         <div class="row">
           <button class="btn btn-primary" id="run-ocr" type="button" disabled>Lancer l'OCR</button>
           <button class="btn btn-ghost" id="clear-files" type="button" disabled>Tout effacer</button>
+          <label class="small muted row" style="gap:.45rem;cursor:pointer">
+            <input type="checkbox" id="include-images">
+            Inclure les images (aperçu + .docx) — réponse API plus lourde
+          </label>
         </div>
         <span class="small muted" id="queue-count"></span>
       </div>
@@ -112,6 +117,8 @@
   <script src="../../assets/vendor/marked.min.js"></script>
   <script src="../../assets/vendor/dompurify.min.js"></script>
   <script src="../../assets/vendor/docx.min.js"></script>
+  <script src="../../assets/vendor/katex/katex.min.js"></script>
+  <script src="../../assets/vendor/katex/katex-auto-render.min.js"></script>
   <script src="md2docx.js"></script>
   <script src="ocr.js"></script>
 </body>

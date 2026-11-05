@@ -7,6 +7,7 @@
   const MODELS_URL = 'https://api.mistral.ai/v1/models';
   const MODEL = 'mistral-ocr-latest';
   const LS_KEY = 'lenancker.ocr.apiKey';
+  const LS_IMAGES = 'lenancker.ocr.includeImages';
   const MAX_FILE_BYTES = 50 * 1024 * 1024; // limite API Mistral : 50 Mo
   const WARN_FILE_BYTES = 20 * 1024 * 1024;
 
@@ -32,7 +33,14 @@
     run: $('run-ocr'), clear: $('clear-files'), queueCount: $('queue-count'),
     progressWrap: $('progress-wrap'), progressBar: $('progress-bar'),
     results: $('results'), empty: $('empty-results'), copyAll: $('copy-all'),
+    includeImages: $('include-images'),
   };
+  if (els.includeImages) {
+    els.includeImages.checked = localStorage.getItem(LS_IMAGES) === '1';
+    els.includeImages.addEventListener('change', () => {
+      localStorage.setItem(LS_IMAGES, els.includeImages.checked ? '1' : '0');
+    });
+  }
   document.getElementById('brand-logo').innerHTML = window.iconSvg('scan');
 
   marked.setOptions({ gfm: true, breaks: true });
@@ -84,8 +92,8 @@
   }
 
   /* Copie en HTML riche (text/html) pour coller directement dans Word / Google Docs. */
-  async function copyRichHtml(md) {
-    const html = DOMPurify.sanitize(marked.parse(md));
+  async function copyRichHtml(md, images) {
+    const html = mdToRichHtml(md, images);
     if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
       try {
         await navigator.clipboard.write([new ClipboardItem({
@@ -176,7 +184,7 @@
       if (file.size > WARN_FILE_BYTES) {
         window.toast(`${file.name} est volumineux (${fmtSize(file.size)}) : l’OCR peut prendre du temps.`, 'warn', 5200);
       }
-      queue.push({ id: ++seq, file, kind, status: 'pending', dataUrl: null, markdown: null, pages: 0, error: null });
+      queue.push({ id: ++seq, file, kind, status: 'pending', dataUrl: null, markdown: null, pages: 0, images: {}, error: null });
       added++;
     }
     if (added) renderQueue();
@@ -263,8 +271,50 @@
 
   els.clear.addEventListener('click', () => { queue = []; renderQueue(); });
 
+  /* ---------- Préparation du Markdown ---------- */
+  /* Enveloppe le LaTeX nu (_ {...} / ^ {...}) de $...$ pour KaTeX,
+     sans toucher aux blocs de code ni au contenu déjà en $...$. */
+  function wrapBareScripts(text) {
+    return text.split(/(\$[^$]+\$)/g).map((seg, i) => {
+      if (i % 2 === 1) return seg;
+      return seg
+        .replace(/(?<!\\)_\{([^}]+)\}/g, '$_{$1}$')
+        .replace(/(?<!\\)\^\{([^}]+)\}/g, '$^{$1}$');
+    }).join('');
+  }
+
+  function prepareMarkdown(md, images) {
+    let out = String(md || '');
+    // images : data URL à la place de la référence quand on les a reçues
+    if (images && Object.keys(images).length) {
+      out = out.replace(/!\[([^\]]+)\]\([^)]*\)/g, (m, alt) => (images[alt] ? `![${alt}](${images[alt]})` : m));
+    }
+    // hors blocs de code ```...``` : LaTeX nu -> $...$
+    const parts = out.split(/(```[\s\S]*?```)/g);
+    return parts.map((p, i) => (i % 2 === 1 ? p : wrapBareScripts(p))).join('');
+  }
+
+  const KATEX_OPTS = {
+    delimiters: [
+      { left: '$$', right: '$$', display: true },
+      { left: '\\[', right: '\\]', display: true },
+      { left: '\\(', right: '\\)', display: false },
+      { left: '$', right: '$', display: false },
+    ],
+    trust: false,
+    strict: false,
+  };
+
+  function mdToRichHtml(md, images) {
+    const div = document.createElement('div');
+    div.innerHTML = DOMPurify.sanitize(marked.parse(prepareMarkdown(md, images)));
+    if (window.renderMathInElement) window.renderMathInElement(div, KATEX_OPTS);
+    return div.innerHTML;
+  }
+
   /* ---------- Appel API Mistral OCR ---------- */
   async function callOcr(item, key, attempt) {
+    const includeImages = localStorage.getItem(LS_IMAGES) === '1';
     const document = item.kind === 'pdf'
       ? { type: 'document_url', document_url: item.dataUrl }
       : { type: 'image_url', image_url: item.dataUrl };
@@ -275,7 +325,7 @@
         'Authorization': `Bearer ${key}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ model: MODEL, document, include_image_base64: false }),
+      body: JSON.stringify({ model: MODEL, document, include_image_base64: includeImages }),
     });
 
     if (!res.ok) {
@@ -295,6 +345,17 @@
     const pages = Array.isArray(data.pages) ? data.pages : [];
     item.markdown = pages.map((p) => p.markdown || '').join('\n\n').trim();
     item.pages = data.usage_info?.pages_processed ?? pages.length;
+    item.images = {};
+    if (includeImages) {
+      for (const p of pages) {
+        for (const img of p.images || []) {
+          if (!img.id || !img.image_base64) continue;
+          const ext = String(img.id).split('.').pop().toLowerCase();
+          const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+          item.images[img.id] = `data:${mime};base64,${img.image_base64}`;
+        }
+      }
+    }
     if (!item.markdown) throw new Error('Réponse vide de l’API OCR.');
   }
 
@@ -391,7 +452,7 @@
     const btnHtml = document.createElement('button');
     btnHtml.type = 'button'; btnHtml.className = 'btn btn-ghost btn-sm'; btnHtml.textContent = 'HTML';
     btnHtml.title = 'Copier en HTML riche (coller dans Word / Google Docs avec Ctrl+V)';
-    btnHtml.addEventListener('click', () => copyRichHtml(item.markdown));
+    btnHtml.addEventListener('click', () => copyRichHtml(item.markdown, item.images));
 
     const base = item.file.name.replace(/\.[^.]+$/, '');
 
@@ -409,7 +470,7 @@
     btnDocx.addEventListener('click', async () => {
       btnDocx.disabled = true; btnDocx.classList.add('loading');
       try {
-        const blob = await window.Md2Docx.mdToDocxBlob(item.markdown, item.file.name);
+        const blob = await window.Md2Docx.mdToDocxBlob(item.markdown, item.file.name, item.images);
         downloadBlob(`${base}.ocr.docx`, blob);
         window.toast('Document Word .docx téléchargé — éditable dans Word / LibreOffice.', 'ok');
       } catch (e) {
@@ -426,7 +487,7 @@
 
     const preview = document.createElement('div');
     preview.className = 'md-preview';
-    preview.innerHTML = DOMPurify.sanitize(marked.parse(item.markdown));
+    preview.innerHTML = mdToRichHtml(item.markdown, item.images);
 
     const source = document.createElement('textarea');
     source.className = 'md-source hidden';
