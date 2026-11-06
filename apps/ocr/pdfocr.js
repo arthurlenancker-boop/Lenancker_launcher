@@ -259,36 +259,6 @@
     };
   }
 
-  /* ---------- Uniformisation d'éclairage : maths pures (testables sous Node) ---------- */
-  const PAPER_TARGET = 235; // niveau de « papier » visé après division
-
-  /* Filtre « divide » : out = PAPER × pixel / fond approximé. Le fond vient
-     d'un très fort sous-échantillonnage (luminance lissée) ; les traits, plus
-     sombres que leur fond local, ressortent du même facteur — la page sous une
-     ombre remonte à ~235 sans toucher l'encre. src et bg : RGBA (canvas). */
-  function divideNormalize(src, bg) {
-    for (let i = 3; i < src.length; i += 4) src[i] = 255; // toute transparence devient blanche
-    for (let i = 0; i < src.length; i += 4) {
-      // trois canaux de couleur
-      const b0 = Math.max(1, bg[i]), b1 = Math.max(1, bg[i + 1]), b2 = Math.max(1, bg[i + 2]);
-      src[i] = (src[i] * PAPER_TARGET) / b0;
-      src[i + 1] = (src[i + 1] * PAPER_TARGET) / b1;
-      src[i + 2] = (src[i + 2] * PAPER_TARGET) / b2;
-    }
-  }
-
-  /* Décide (p10/p90 de la luminance moyenne par ligne/colonne de l'analyse)
-     s'il faut uniformiser. Trois garde-fous : bande sombre ≈ table du scanneur
-     (on n'y touche pas — le détourage s'en occupe), feuille sombre (aucun
-     éclaircissement hasardeux), et un seuil d'hétérogénéité — plus bas quand une
-     rotation a lieu de toute façon (la recompression est déjà payée). */
-  function planLightNormalize(p10, p90, willRotate) {
-    const spread = p90 - p10;
-    if (p10 < 80) return false;   // bande sombre : page sur table sombre, scanneur à chargeur
-    if (p90 < 110) return false;  // feuille sombre : pas d'éclaircissement hasardeux
-    return spread >= (willRotate ? 40 : 55);
-  }
-
   return {
     buildSearchablePdf,
     toWinAnsi,
@@ -297,7 +267,5 @@
     insetsFromProfiles,
     bestSkewAngle,
     rotationSize,
-    divideNormalize,
-    planLightNormalize,
   };
 });

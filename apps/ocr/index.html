@@ -63,6 +63,15 @@
         <span class="small muted">images PNG · JPG · WEBP · GIF · AVIF, PDF ou .docx/.pptx (50 Mo max)</span>
       </div>
 
+      <div class="field">
+        <label>Mode d&rsquo;analyse</label>
+        <div class="seg" role="radiogroup" aria-label="Mode d'analyse">
+          <button type="button" class="active" id="mode-ocr" aria-pressed="true">OCR <span class="small muted">(fidèle)</span></button>
+          <button type="button" id="mode-ia" aria-pressed="false">OCR assisté par IA</button>
+        </div>
+        <p class="small muted" id="mode-hint">Fidèle au document : le texte sort tel que reconnu, rien n&rsquo;est modifié.</p>
+      </div>
+
       <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Glisse-dépose des images ou PDF ici, ou clique pour parcourir">
         <div class="dz-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m6 10 6-6 6 6"/><path d="M4 20h16"/></svg>
@@ -87,20 +96,13 @@
             Détourer les scans dans les PDF (retire les bords de table autour de la feuille)
           </label>
           <label class="small muted row" style="gap:.45rem;cursor:pointer">
-            <input type="checkbox" id="deskew" checked>
-            Redresser les scans penchés (inclinaison détectée automatiquement avant l'analyse)
-          </label>
-          <label class="small muted row" style="gap:.45rem;cursor:pointer">
-            <input type="checkbox" id="light-even" checked>
-            Atténuer les ombres des photos (éclairage uniformisé avant l'analyse)
-          </label>
-          <label class="small muted row" style="gap:.45rem;cursor:pointer">
             <input type="checkbox" id="clean-hf" checked>
             Écarter en-têtes et pieds de page du texte (numéros de page, mentions courantes)
           </label>
         </div>
         <span class="small muted" id="queue-count"></span>
       </div>
+      <p class="small muted" style="margin:0.6rem 0 0">Les scans penchés sont redressés automatiquement avant l&rsquo;analyse (angle signalé sur la carte résultat).</p>
 
       <div class="progress hidden" id="progress-wrap" role="progressbar" aria-label="Progression de l'OCR">
         <div class="progress-bar" id="progress-bar"></div>
