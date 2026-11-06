@@ -24,10 +24,11 @@ window.LENANCKER_APPS = [
   {
     slug: 'revision',
     name: 'Révision',
-    desc: "Fiches de révision espacées et quiz actifs, calibrés sur les principes de la répétition espacée et du test actif.",
+    desc: "Cartes mémos à répétition espacée : chaque carte est une question-réponse, SM-2 la replanifie juste avant l'oubli (Encore / Difficile / Moyen / Facile), le test actif fait le travail de mémorisation. Paquets recto/verso, séries de jours, export/import — fondé sur le brief répétition espacée & test actif.",
     icon: 'brain',
     tint: 'rgba(123, 196, 127, 0.12)',
     accent: '#7bc47f',
-    status: 'bientôt',
+    status: 'disponible',
+    href: 'apps/revision/index.html',
   },
 ];

@@ -1,0 +1,146 @@
+/* Révision — styles spécifiques (complètent design.css) */
+
+.panel { padding: clamp(1.2rem, 3vw, 1.7rem); margin-bottom: 1.4rem; }
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap; margin-bottom: 0.4rem;
+}
+.panel h2 { margin: 0 0 0.35rem; font-size: 1.3rem; letter-spacing: -0.02em; font-weight: 700; }
+.panel h2 .serif-em { color: var(--accent); font-size: 1.15em; }
+.grow { flex: 1; min-width: min(100%, 220px); }
+.subpanel { padding: 0.9rem 1rem; border-radius: var(--r-md); margin-block: 0.9rem; }
+
+/* --- Barre de progression --- */
+.progress {
+  margin-top: 1rem; height: 7px; border-radius: 999px;
+  background: rgba(242, 239, 231, 0.08); overflow: hidden;
+}
+.progress-bar {
+  height: 100%; width: 0%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.4s var(--ease);
+}
+
+/* --- Statistiques --- */
+.stat { display: flex; flex-direction: column; align-items: center; gap: 0.15rem; }
+.stat-val { font-size: 1.35rem; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.stat-line { font-size: 0.92rem; }
+
+/* --- Paquets --- */
+.decks { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 1rem; }
+.deck-row {
+  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+  padding: 0.8rem 1rem; border-radius: var(--r-md);
+  background: rgba(0, 0, 0, 0.25); border: 1px solid var(--stroke-soft);
+  cursor: pointer; transition: border-color 0.25s, background 0.25s, transform 0.25s var(--ease);
+  animation: rise 0.45s var(--ease);
+}
+.deck-row:hover { border-color: rgba(123, 196, 127, 0.5); background: var(--glass-strong); transform: translateY(-2px); }
+.deck-row .dname { flex: 1; min-width: 0; font-weight: 700; }
+.deck-row .dmeta { display: flex; gap: 0.5rem; flex: none; }
+
+/* --- Liste des cartes d'un paquet --- */
+.cards-list { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.4rem; }
+.card-row {
+  display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.9rem; align-items: start;
+  padding: 0.7rem 0.9rem; border-radius: var(--r-sm);
+  background: rgba(0, 0, 0, 0.22); border: 1px solid var(--stroke-soft);
+  animation: rise 0.4s var(--ease);
+}
+.card-row .cface { font-size: 0.86rem; line-height: 1.45; overflow-wrap: anywhere; }
+.card-row .cface small { display: block; color: var(--ink-faint); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.15rem; }
+.card-row .cactions { display: flex; gap: 0.3rem; flex: none; }
+.card-row .cactions button {
+  border: none; background: transparent; color: var(--ink-faint); cursor: pointer;
+  padding: 0.25rem 0.4rem; border-radius: 6px; font-size: 0.9rem;
+  transition: color 0.2s, background 0.2s;
+}
+.card-row .cactions button:hover { color: var(--accent); background: rgba(255, 83, 16, 0.12); }
+.card-row .cactions button.danger:hover { color: var(--err); background: rgba(229, 96, 79, 0.15); }
+.card-row .cmaturity { grid-column: 1 / -1; font-size: 0.7rem; color: var(--ink-faint); }
+@media (max-width: 640px) { .card-row { grid-template-columns: 1fr; } }
+
+/* --- Session --- */
+.session-panel { padding: clamp(1.2rem, 3vw, 1.9rem); margin-bottom: 1.4rem; }
+.session-progress { margin-bottom: 1.1rem; }
+.memo-stage { display: flex; flex-direction: column; gap: 0.7rem; align-items: center; justify-content: center; min-height: 240px; }
+
+.memo-card {
+  width: min(640px, 100%); aspect-ratio: 16 / 10;
+  position: relative; perspective: 1400px;
+  cursor: pointer;
+}
+.memo-card .memo-face {
+  position: absolute; inset: 0; margin: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 1.4rem 1.6rem; text-align: center;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--stroke-soft);
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  font-size: clamp(0.98rem, 2.4vw, 1.18rem);
+  line-height: 1.5; overflow: auto;
+  background: var(--glass-strong);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  transition: transform 0.55s var(--ease);
+}
+.memo-card .memo-face p { margin: 0; }
+.memo-card .memo-face ul { margin: 0.2rem 0; padding-inline-start: 1.2rem; text-align: left; }
+.memo-card .memo-front { background: var(--glass-strong); }
+.memo-card .memo-back {
+  transform: rotateY(180deg);
+  background: rgba(123, 196, 127, 0.07);
+  border-color: rgba(123, 196, 127, 0.35);
+}
+.memo-card.revealed .memo-front { transform: rotateY(-180deg); }
+.memo-card.revealed .memo-back { transform: rotateY(0deg); }
+
+@media (prefers-reduced-motion: reduce), (max-width: 640px) {
+  .memo-card .memo-face { transition: none; }
+  .memo-card.revealed .memo-front { transform: none; visibility: hidden; }
+  .memo-card.revealed .memo-back { transform: none; display: flex; }
+  .memo-card.revealed .memo-front { display: none; }
+}
+
+/* --- Notes de session --- */
+#grade-actions { width: 100%; margin-top: 0.4rem; }
+#grade-actions .btn {
+  flex: 1; flex-direction: column; gap: 0.1rem;
+  padding: 0.6rem 0.4rem; font-size: 0.88rem;
+}
+#grade-actions .btn small { font-size: 0.66rem; opacity: 0.65; }
+.grade-again { border-color: rgba(229, 96, 79, 0.55); }
+.grade-again:hover { border-color: var(--err); background: rgba(229, 96, 79, 0.12); }
+.grade-hard { border-color: rgba(232, 179, 75, 0.55); }
+.grade-hard:hover { border-color: var(--warn); background: rgba(232, 179, 75, 0.12); }
+.grade-good { border-color: rgba(123, 196, 127, 0.55); }
+.grade-good:hover { border-color: var(--ok); background: rgba(123, 196, 127, 0.12); }
+.grade-easy { border-color: rgba(255, 83, 16, 0.55); }
+.grade-easy:hover { border-color: var(--accent); background: rgba(255, 83, 16, 0.12); }
+
+#session-done .done-title {
+  color: var(--ok); font-size: 1.3rem; margin: 0 0 0.6rem;
+}
+.stat-line { font-size: 0.9rem; }
+
+/* --- Graphe semaine (comme Focus) --- */
+.week-chart {
+  display: flex; align-items: flex-end; gap: 0.45rem;
+  height: 110px; padding-top: 0.4rem;
+}
+.week-day {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: flex-end; gap: 0.35rem;
+  height: 100%;
+}
+.week-day .week-bar {
+  width: 70%; max-width: 34px; border-radius: 6px 6px 2px 2px;
+  background: linear-gradient(180deg, rgba(123, 196, 127, 0.85), rgba(123, 196, 127, 0.35));
+  min-height: 3px;
+  transition: height 0.4s var(--ease);
+}
+.week-day .small { color: var(--ink-faint); }
+.week-day.today .week-bar {
+  background: linear-gradient(180deg, rgba(255, 83, 16, 0.9), rgba(255, 83, 16, 0.4));
+}

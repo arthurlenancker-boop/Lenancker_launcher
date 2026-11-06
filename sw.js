@@ -1,7 +1,7 @@
 /* Service worker du Lenancker Launcher.
    Stratégie : cache-first pour les assets statiques (le launcher doit
    rester utilisable hors-ligne), réseau direct pour l'API Mistral. */
-const VERSION = 'lenancker-v14';
+const VERSION = 'lenancker-v15';
 const CORE = [
   './',
   'index.html',
@@ -57,7 +57,13 @@ const CORE = [
   'apps/focus/focus.css',
   'apps/focus/core.js',
   'apps/focus/focus.js',
+  'apps/revision/',
+  'apps/revision/index.html',
+  'apps/revision/revision.css',
+  'apps/revision/core.js',
+  'apps/revision/revision.js',
   'docs/recherche-focus-tda-tsa.md',
+  'docs/recherche-revision-memoisation.md',
 ];
 
 self.addEventListener('install', (event) => {
