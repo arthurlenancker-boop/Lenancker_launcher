@@ -1,7 +1,7 @@
 /* Service worker du Lenancker Launcher.
    Stratégie : cache-first pour les assets statiques (le launcher doit
    rester utilisable hors-ligne), réseau direct pour l'API Mistral. */
-const VERSION = 'lenancker-v17';
+const VERSION = 'lenancker-v18';
 const CORE = [
   './',
   'index.html',
@@ -14,6 +14,8 @@ const CORE = [
   'assets/vendor/dompurify.min.js',
   'assets/vendor/docx.min.js',
   'assets/vendor/pdf-lib.min.js',
+  'assets/vendor/pdfjs/pdf.min.js',
+  'assets/vendor/pdfjs/pdf.worker.min.js',
   'assets/vendor/katex/katex.min.js',
   'assets/vendor/katex/katex.min.css',
   'assets/vendor/katex/katex-auto-render.min.js',

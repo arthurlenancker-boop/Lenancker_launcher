@@ -82,7 +82,7 @@
     els.modeIa.setAttribute('aria-pressed', String(ia));
     if (els.modeHint) {
       els.modeHint.textContent = ia
-        ? 'Après la reconnaissance, un petit modèle Mistral remet le document au propre (structure, typographie) — interdiction d\u2019ajouter ou d\u2019inventer, mots douteux rendus [illisible], résultat trop écarté refusé. L\u2019OCR brut reste en onglet pour vérifier.'
+        ? 'Après l\u2019OCR, un modèle Mistral à vision relit le document original (l\u2019image, ou les pages du PDF une à une) et recrée lui-même le document en Markdown — prompt strict : interdiction d\u2019inventer, de deviner ou de modifier, mot illisible rendu [illisible]. L\u2019OCR brut reste en onglet pour vérifier.'
         : 'Fidèle au document : le texte sort tel que reconnu, rien n\u2019est modifié.';
     }
   }
@@ -353,7 +353,7 @@
       if (file.size > WARN_FILE_BYTES) {
         window.toast(`${file.name} est volumineux (${fmtSize(file.size)}) : l’OCR peut prendre du temps.`, 'warn', 5200);
       }
-      queue.push({ id: ++seq, file, kind, status: 'pending', dataUrl: null, markdown: null, pages: 0, images: {}, imageDims: {}, confScore: null, skew: 0, cleanMd: null, error: null });
+      queue.push({ id: ++seq, file, kind, status: 'pending', dataUrl: null, markdown: null, pages: 0, images: {}, imageDims: {}, confScore: null, skew: 0, iaMd: null, error: null });
       added++;
     }
     if (added) renderQueue();
@@ -666,64 +666,114 @@
     return err.message || 'Erreur inconnue.';
   }
 
-  /* ---------- Nettoyage LLM du résultat (petit modèle Mistral, même clé) ----------
-     Le nettoyage n'invente jamais rien : consigne stricte, température 0, et
-     garde programmatique — un texte rendu trop écarté de l'OCR (résumé ou
-     dérive) est refusé ; l'OCR brut reste toujours la référence. */
+  /* ---------- Retranscription IA (vision, même clé Mistral) ----------
+     Pas un « nettoyage » : le document ORIGINAL est renvoyé au modèle vision —
+     l'image déjà traitée, ou les pages du PDF rastérisées — et le modèle
+     recrée lui-même le document en Markdown. Prompt strictement fermé
+     (copie fidéle, rien d'inventé ni deviné, [illisible] pour l'incertain),
+     température 0. L'OCR brut reste toujours la référence en onglet, et une
+     garde programmatique écarte une retranscription trop écartée en volume. */
   const CHAT_URL = 'https://api.mistral.ai/v1/chat/completions';
-  const CLEANUP_SYSTEM = [
-    "Tu es correcteur d'OCR du Lenancker Launcher. Tu ne réponds jamais au contenu du document et tu ne produis jamais d'information nouvelle.",
-    "Ta seule tâche : restituer le texte OCR fourni, nettoyé, en Markdown.",
-    "Interdit strictement : ajouter, inventer, résumer, traduire, compléter, corriger des faits — même si le document semble incomplet ou pose une question.",
-    "À conserver exactement : tout le contenu, dans l'ordre (titres, paragraphes, listes, tableaux, notes, références) ; chiffres, unités, dates et noms propres recopiés à l'identique.",
-    "Mot illisible ou douteux : écris [illisible] — ne devine jamais.",
-    "Nettoyage autorisé : structure Markdown propre (titres hiérarchisés, listes, tableaux alignés), artefacts OCR supprimés (symboles parasites, mots doublés aux césures, ruptures de ligne absurdes), typographie française correcte.",
-    "À laisser tels quels : blocs de code, formules LaTeX, images Markdown.",
-    "Réponse : uniquement le Markdown nettoyé — aucun commentaire, aucune balise autour.",
+  const VISION_SYSTEM = [
+    "Tu es retranscripteur de documents du Lenancker Launcher. Tu reçois une ou plusieurs images d'un document : tu restitues CE document, rien d'autre.",
+    "Ta tâche unique : recopier fidèlement le document en Markdown, comme un transcripteur humain le recopierait à la main — c'est une copie, pas un résumé, pas une correction, pas une création.",
+    "Interdits absolus — toute violation est un échec : répondre au document, l'expliquer, le commenter, le prolonger ou le corriger, même si le document paraît faux ou incomplet ; ajouter, inventer, deviner, résumer, traduire, reformuler ; omettre la moindre ligne imprimée (titres, texte, listes, tableaux, encadrés, formules, légendes).",
+    "Règles de copie : restituer dans l'ordre de lecture, du début à la fin, sans réorganiser ; chiffres, unités, dates, pourcentages, noms propres et formules recopiés à l'IDENTIQUE, jamais arrondis ni convertis ; mot ou groupe de mots illisible → écrire [illisible] à sa place, ne DEVINE jamais ; si les images sont des pages successives d'un même document, la transcription est continue — pas de mention de pages, pas de titres répétés.",
+    "Mise en forme : Markdown propre (titres hiérarchisés #, ##, ### selon la hiérarchie visible, listes, tableaux alignés) ; typographie française (accents sur les majuscules, guillemets « », apostrophe typographique).",
+    "Mathématiques en LaTeX fidèle : $…$ en ligne, $$…$$ en bloc (indices, exposants, \\frac{}{}, racines) — la formule du document, jamais « simplifiée ». Chimie : indices et exposants exacts ($MnO_2$, $^{14}C$).",
+    "Figures, schémas, photos, captures : remplacés par ![figure](figure-N) numérotés dans l'ordre d'apparition — jamais décrits ni interprétés ; leur légende écrite est recopiée.",
+    "Réponse : uniquement le Markdown du document — aucune introduction, aucune conclusion, aucune balise autour.",
   ].join('\n');
-  const CLEANUP_MAX_CHARS = 60000;
-  const CLEANUP_MODEL_PREFS = ['mistral-small-latest', 'ministral-8b-latest', 'open-mistral-nemo', 'mistral-medium-latest'];
+  const VISION_MODEL_PREFS = ['pixtral-12b-2409', 'mistral-small-latest', 'pixtral-large-latest', 'mistral-medium-latest', 'ministral-14b-latest'];
+  const VISION_MAX_PAGES = 15;    // garde-fou volume/temps ; au-delà, toast avertit
+  const VISION_CHUNK = 8;         // limite usuelle des modèles vision (images par requête)
+  const VISION_LONG_EDGE = 1600;  // côté long d'une page rastérisée
 
-  /* Choisit le petit modèle de chat réellement accessible à la clé
-     (liste /v1/models) : pas de référence figée qui daterait. */
-  function pickCleanupModel(ids) {
-    const list = (Array.isArray(ids) ? ids : []).map((m) => String(m || ''));
-    for (const id of CLEANUP_MODEL_PREFS) if (list.includes(id)) return id;
-    return list.find((id) => /small|ministral|nemo/i.test(id) && !/ocr|embed|moderation|code/i.test(id)) || null;
-  }
-
-  let cleanupModelCache = null;
-
-  /* Garde anti-hallucination : le nettoyé doit rester fidèle en volume au
-     texte OCR — une structure se répare, un document ne se résume pas. */
-  function cleanupLooksSane(out, raw) {
-    return out.length >= raw.length * 0.55 && out.length <= raw.length * 1.7;
-  }
-
-  async function llmCleanup(item, key, attempt) {
-    const a = attempt || 1;
-    const raw = item.markdown || '';
-    if (!raw) throw new Error('aucun texte OCR à nettoyer');
-    if (raw.length > CLEANUP_MAX_CHARS) throw new Error('document trop long pour le nettoyage (plus de 60 000 caractères) — découpe-le en morceaux');
-    if (!cleanupModelCache) {
-      const res = await fetch(MODELS_URL, { headers: { Authorization: `Bearer ${key}` } });
-      if (!res.ok) throw Object.assign(new Error(`liste des modèles inaccessible (HTTP ${res.status})`), { status: res.status });
-      const data = await res.json().catch(() => null);
-      cleanupModelCache = pickCleanupModel(((data && data.data) || []).map((m) => m.id));
-      if (!cleanupModelCache) throw new Error('aucun modèle de chat trouvé pour cette clé');
+  let pdfJsPromise = null;
+  function ensurePdfJs() {
+    if (!pdfJsPromise) {
+      pdfJsPromise = loadScript('../../assets/vendor/pdfjs/pdf.min.js').then(() => {
+        const lib = globalThis.pdfjsLib || window.pdfjsLib;
+        if (!lib) throw new Error('pdfjs indisponible');
+        lib.GlobalWorkerOptions.workerSrc = '../../assets/vendor/pdfjs/pdf.worker.min.js';
+        return lib;
+      }).catch((e) => { pdfJsPromise = null; throw e; });
     }
-    const body = {
-      model: cleanupModelCache,
-      messages: [
-        { role: 'system', content: CLEANUP_SYSTEM },
-        { role: 'user', content: 'Voici le texte OCR, entre balises :\n<document>\n' + raw + '\n</document>\n\nRestitue-le nettoyé, fidèlement.' },
-      ],
-      temperature: 0,
-    };
+    return pdfJsPromise;
+  }
+
+  /* Pages d'un PDF -> data-URL JPEG (fond blanc, côté long ~1600 px). */
+  async function pdfPagesToImages(item) {
+    const pdfjsLib = await ensurePdfJs();
+    const bytes = new Uint8Array(await item.file.arrayBuffer());
+    const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+    const n = Math.min(pdf.numPages, VISION_MAX_PAGES);
+    const urls = [];
+    for (let i = 1; i <= n; i++) {
+      const page = await pdf.getPage(i);
+      const base = page.getViewport({ scale: 1 });
+      const scale = Math.min(2.5, VISION_LONG_EDGE / Math.max(base.width, base.height));
+      const vp = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height); // le JPEG n'a pas de transparence
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      urls.push(canvas.toDataURL('image/jpeg', 0.85));
+      page.cleanup();
+    }
+    if (pdf.numPages > n) {
+      window.toast(`${item.file.name} : retranscription limitée aux ${n} premières pages.`, 'warn', 6500);
+    }
+    return urls;
+  }
+
+  /* Le document tel que le voit le modèle : l'image traitée, ou les pages PDF. */
+  async function documentVisionImages(item) {
+    if (item.kind === 'image') return [item.dataUrl || await prepareImage(item)];
+    const isPdf = (item.file.type || '').includes('pdf') || /\.pdf$/i.test(item.file.name);
+    if (!isPdf) throw new Error('retranscription vision disponible pour les images et les PDF uniquement');
+    return pdfPagesToImages(item);
+  }
+
+  /* Modèles vision réellement accessibles à la clé (liste /v1/models),
+     préférences d'abord : le pic de retranscription documentaire d'abord. */
+  function pickVisionModel(ids) {
+    const list = (Array.isArray(ids) ? ids : []).map((m) => String(m || ''));
+    for (const id of VISION_MODEL_PREFS) if (list.includes(id)) return id;
+    return list.find((id) => /pixtral|small|medium/i.test(id) && !/ocr|embed|moderation|code|nemo|ministral-8b/i.test(id)) || null;
+  }
+
+  let visionOrderCache = null;
+  let visionModelCache = null;
+
+  /* Garde anti-hallucination : la retranscription doit rester dans le volume
+     de l'OCR — un écart flagrant trahit un résumé ou une dérive ; l'OCR brut
+     reste toujours la référence affichée. */
+  function retranscribeLooksSane(out, raw) {
+    return out.length >= raw.length * 0.5 && out.length <= raw.length * 2.5;
+  }
+
+  async function askVision(model, images, key, attempt) {
+    const a = attempt || 1;
+    const parts = [{
+      type: 'text',
+      text: images.length === 1
+        ? 'Transcris fidèlement ce document.'
+        : 'Transcris fidèlement ces pages du même document, dans l\u2019ordre, en une transcription continue.',
+    }];
+    for (const u of images) parts.push({ type: 'image_url', image_url: u });
     const res = await fetch(CHAT_URL, {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: VISION_SYSTEM },
+          { role: 'user', content: parts },
+        ],
+        temperature: 0,
+      }),
     });
     if (!res.ok) {
       let message = `HTTP ${res.status}`;
@@ -732,17 +782,58 @@
         if (err && (err.message || err.detail)) message = err.message || err.detail;
       } catch { /* garde le statut HTTP */ }
       if ((res.status >= 500 || res.status === 429) && a < 2) {
-        await new Promise((r) => setTimeout(r, 1200 * a));
-        return llmCleanup(item, key, a + 1);
+        await new Promise((r) => setTimeout(r, 1500 * a));
+        return askVision(model, images, key, a + 1);
       }
       throw Object.assign(new Error(message), { status: res.status });
     }
     const data = await res.json();
-    let out = ((data.choices || [])[0] || {}).message?.content?.trim() || '';
-    out = out.replace(/^<document>\s*/i, '').replace(/<\/document>\s*$/i, '').trim();
+    const out = (((data.choices || [])[0] || {}).message?.content || '').trim();
     if (!out) throw new Error('réponse vide du modèle');
-    if (!cleanupLooksSane(out, raw)) {
-      throw new Error('le modèle s’est trop écarté du texte OCR (résumé ou dérive) — résultat écarté, l’OCR brut reste la référence');
+    return out;
+  }
+
+  async function iaRetranscribe(item, key) {
+    const raw = item.markdown || '';
+    if (!raw) throw new Error('aucun texte OCR de référence');
+    const images = await documentVisionImages(item);
+    if (!images.length) throw new Error('aucune page à relire');
+
+    if (!visionOrderCache) {
+      const res = await fetch(MODELS_URL, { headers: { Authorization: `Bearer ${key}` } });
+      if (!res.ok) throw Object.assign(new Error(`liste des modèles inaccessible (HTTP ${res.status})`), { status: res.status });
+      const data = await res.json().catch(() => null);
+      const ids = ((data && data.data) || []).map((m) => m.id);
+      const ordered = VISION_MODEL_PREFS.filter((id) => ids.includes(id));
+      const order = ordered.length ? ordered : [pickVisionModel(ids)].filter(Boolean);
+      if (!order.length) throw new Error('aucun modèle de vision accessible pour cette clé');
+      visionOrderCache = order;
+    }
+    const order = visionModelCache
+      ? [visionModelCache, ...visionOrderCache.filter((m) => m !== visionModelCache)]
+      : visionOrderCache;
+
+    /* Les pages en tranches (limite usuelle de 8 images par requête). */
+    const chunks = [];
+    for (let i = 0; i < images.length; i += VISION_CHUNK) chunks.push(images.slice(i, i + VISION_CHUNK));
+
+    let lastErr = null;
+    let out = '';
+    for (const model of order.slice(0, 3)) { // au plus 3 modèles essayés (clés restreintes)
+      try {
+        out = '';
+        for (const chunk of chunks) out += (out ? '\n\n' : '') + await askVision(model, chunk, key);
+        visionModelCache = model;
+        break;
+      } catch (e) {
+        // 400/404/415/422 : modèle absent de la clé ou images refusées → modèle suivant
+        if (e && (e.status === 400 || e.status === 404 || e.status === 415 || e.status === 422)) { lastErr = e; continue; }
+        throw e;
+      }
+    }
+    if (!out) throw lastErr || new Error('retranscription impossible');
+    if (!retranscribeLooksSane(out, raw)) {
+      throw new Error('la retranscription s\u2019écarte trop de l\u2019OCR (résumé ou dérive) — résultat écarté, l\u2019OCR brut reste la référence');
     }
     return out;
   }
@@ -1177,18 +1268,19 @@
           }
           await callOcr(item, key, 1);
           item.status = 'ok';
-          item.dataUrl = null; // libère le base64 en mémoire (jusqu'à ~67 Mo par PDF)
           window.toast(`OCR terminé : ${item.file.name}`, 'ok');
           if (Number.isFinite(item.confScore) && item.confScore !== null && item.confScore < 0.7) {
             window.toast(`${item.file.name} : reconnaissance peu fiable (${Math.round(item.confScore * 100)} %) — relis le texte extrait.`, 'warn', 6500);
           }
           if (getMode() === 'ia') {
             try {
-              item.cleanMd = await llmCleanup(item, key);
+              setProgressLabel(`Retranscription IA : ${item.file.name}`);
+              item.iaMd = await iaRetranscribe(item, key);
             } catch (e) {
-              window.toast(`Assistance IA manquée pour ${item.file.name} — l'OCR brut reste.` + (e && e.message ? ` (${e.message})` : ''), 'warn', 7000);
+              window.toast(`Retranscription IA manquée pour ${item.file.name} — l'OCR brut reste.` + (e && e.message ? ` (${e.message})` : ''), 'warn', 7000);
             }
           }
+          item.dataUrl = null; // libère le base64 en mémoire (après la relecture vision)
         } catch (err) {
           item.status = 'err';
           item.error = friendlyError(err);
@@ -1266,19 +1358,19 @@
     btnPreview.type = 'button'; btnPreview.textContent = 'Aperçu'; btnPreview.className = 'active';
     const btnSource = document.createElement('button');
     btnSource.type = 'button'; btnSource.textContent = 'Markdown';
-    const btnCleanTab = document.createElement('button');
-    btnCleanTab.type = 'button'; btnCleanTab.textContent = 'Nettoyé (IA)';
-    btnCleanTab.classList.toggle('hidden', !item.cleanMd);
-    btnCleanTab.title = 'Version nettoyée par le petit modèle Mistral (mode OCR assisté par IA) — l\u2019onglet Markdown garde l\u2019OCR brut.';
-    seg.append(btnPreview, btnSource, btnCleanTab);
+    const btnIaTab = document.createElement('button');
+    btnIaTab.type = 'button'; btnIaTab.textContent = 'Retranscription IA';
+    btnIaTab.classList.toggle('hidden', !item.iaMd);
+    btnIaTab.title = 'Document recréé fidèlement par le modèle Mistral à vision à partir des images/pages originales (mode OCR assisté par IA) — l\u2019onglet Markdown garde l\u2019OCR brut.';
+    seg.append(btnPreview, btnSource, btnIaTab);
 
-    /* Version affichée : copies et exports suivent l'onglet actif (brut ou nettoyé). */
+    /* Version affichée : copies et exports suivent l'onglet actif (brut ou retranscription). */
     let current = item.markdown;
-    let cleanedActive = false;
+    let iaTabActive = false;
 
     const btnCopy = document.createElement('button');
     btnCopy.type = 'button'; btnCopy.className = 'btn btn-sm'; btnCopy.textContent = 'Copier';
-    btnCopy.title = 'Copier la version affichée (brut ou nettoyé selon l’onglet actif)';
+    btnCopy.title = 'Copier la version affichée (brut ou retranscription selon l’onglet actif)';
     btnCopy.addEventListener('click', () => copyText(current, 'Copié.'));
 
     const btnHtml = document.createElement('button');
@@ -1290,9 +1382,9 @@
 
     const btnDl = document.createElement('button');
     btnDl.type = 'button'; btnDl.className = 'btn btn-ghost btn-sm'; btnDl.textContent = '.md';
-    btnDl.title = 'Télécharger la version affichée (.md, ou .nettoye.md)';
+    btnDl.title = 'Télécharger la version affichée (.md ou .ia.md)';
     btnDl.addEventListener('click', () => {
-      download(`${base}${cleanedActive ? '.nettoye' : '.ocr'}.md`, current);
+      download(`${base}${iaTabActive ? '.ia' : '.ocr'}.md`, current);
       window.toast('Fichier .md téléchargé.', 'ok');
     });
 
@@ -1304,7 +1396,7 @@
       try {
         await ensureDocx();
         const blob = await window.Md2Docx.mdToDocxBlob(current, item.file.name, item.images, item.imageDims);
-        downloadBlob(`${base}${cleanedActive ? '.nettoye' : '.ocr'}.docx`, blob);
+        downloadBlob(`${base}${iaTabActive ? '.ia' : '.ocr'}.docx`, blob);
         window.toast('Document Word .docx téléchargé — éditable dans Word / LibreOffice.', 'ok');
       } catch (e) {
         window.toast('Export .docx impossible : ' + (e && e.message ? e.message : e), 'err');
@@ -1357,9 +1449,9 @@
     const showTab = (which) => {
       btnPreview.classList.toggle('active', which === 'preview');
       btnSource.classList.toggle('active', which === 'source');
-      btnCleanTab.classList.toggle('active', which === 'clean');
-      cleanedActive = which === 'clean';
-      current = which === 'clean' ? item.cleanMd : item.markdown;
+      btnIaTab.classList.toggle('active', which === 'ia');
+      iaTabActive = which === 'ia';
+      current = which === 'ia' ? item.iaMd : item.markdown;
       if (which === 'source') {
         source.value = item.markdown;
         source.classList.remove('hidden'); preview.classList.add('hidden');
@@ -1372,10 +1464,10 @@
     };
     btnPreview.addEventListener('click', () => showTab('preview'));
     btnSource.addEventListener('click', () => showTab('source'));
-    btnCleanTab.addEventListener('click', () => showTab('clean'));
+    btnIaTab.addEventListener('click', () => showTab('ia'));
 
-    // mode « OCR assisté par IA » : la carte s'ouvre directement sur le nettoyé
-    if (item.cleanMd) showTab('clean');
+    // mode « OCR assisté par IA » : la carte s'ouvre directement sur la retranscription
+    if (item.iaMd) showTab('ia');
 
     body.append(preview, source);
     card.append(head, body);
