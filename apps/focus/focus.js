@@ -171,6 +171,24 @@
   if (intent.ifThen) els.ifThen.value = intent.ifThen;
   if (intent.reward) els.reward.value = intent.reward;
 
+  /* L'intention (tâche, plan si… alors…, récompense) est la partie la plus
+     longue à reformuler : on l'enregistre au fil de la frappe, même sans
+     session lancée — avant, elle n'était conservée qu'au clic « Commencer ». */
+  let intentSaveJob = 0;
+  function saveIntentSoon() {
+    if (intentSaveJob) clearTimeout(intentSaveJob);
+    intentSaveJob = setTimeout(() => {
+      intentSaveJob = 0;
+      intent = {
+        task: els.task.value.trim(),
+        ifThen: els.ifThen.value.trim(),
+        reward: els.reward.value.trim(),
+      };
+      storage.set(LS.intent, JSON.stringify(intent));
+    }, 400);
+  }
+  [els.task, els.ifThen, els.reward].forEach((el) => el && el.addEventListener('input', saveIntentSoon));
+
   function on(el, evt, fn) { el.addEventListener(evt, fn); }
   on(els.modeFlux, 'click', () => { settings.mode = 'flux'; applySettingsToUI(); persistSettings(); });
   on(els.modePom, 'click', () => { settings.mode = 'pomodoro'; applySettingsToUI(); persistSettings(); });

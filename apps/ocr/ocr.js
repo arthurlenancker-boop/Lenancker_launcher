@@ -484,6 +484,45 @@
     }).join('');
   }
 
+  /* ---------- Réparation des tableaux markdown ----------
+     L'OCR renvoie parfois des tables aux rangées décalées : cellules manquantes
+     (rangée plus courte que l'en-tête) ou séparateur plus court que l'en-tête
+     — marked refuse alors de rendre la table. On comble ce qui manque (cellules
+     vides), on réécrit le séparateur à la largeur de l'en-tête. Rangées plus
+     longues, blocs sans séparateur, tables saines : inchangés au byte près. */
+  function repairTables(md) {
+    const lines = String(md || '').split('\n');
+    const out = lines.slice();
+    const SEP_RE = /^\s*\|?[\s:\-|]*-[\s:\-|]*\|?\s*$/;
+    const cellsOf = (line) => {
+      let s = line.trim();
+      if (s.startsWith('|')) s = s.slice(1);
+      if (s.endsWith('|')) s = s.slice(0, -1);
+      return s.split(/(?<!\\)\|/);
+    };
+    let i = 0;
+    while (i < lines.length) {
+      const head = lines[i].trim();
+      if (head.startsWith('|') && head !== '|' && i + 1 < lines.length && SEP_RE.test(lines[i + 1])) {
+        const n = cellsOf(lines[i]).length; // l'en-tête fixe la largeur de la table
+        if (cellsOf(lines[i + 1]).length !== n) out[i + 1] = '|' + ' --- |'.repeat(n);
+        let j = i + 2;
+        while (j < lines.length && lines[j].trim().startsWith('|') && !SEP_RE.test(lines[j])) {
+          const cells = cellsOf(lines[j]);
+          if (cells.length < n) {
+            while (cells.length < n) cells.push(' ');
+            out[j] = `| ${cells.map((c) => c.trim()).join(' | ')} |`;
+          }
+          j++;
+        }
+        i = j;
+        continue;
+      }
+      i++;
+    }
+    return out.join('\n');
+  }
+
   function prepareMarkdown(md, images) {
     let out = String(md || '');
     // images : data URL à la place de la référence quand on les a reçues
@@ -572,7 +611,7 @@
 
     const data = await res.json();
     const pages = Array.isArray(data.pages) ? data.pages : [];
-    item.markdown = pages.map((p) => p.markdown || '').join('\n\n').trim();
+    item.markdown = repairTables(pages.map((p) => p.markdown || '').join('\n\n').trim());
     item.pages = data.usage_info?.pages_processed ?? pages.length;
     item.images = {};
     item.imageDims = {};
@@ -909,6 +948,8 @@
     const cv = document.createElement('canvas');
     cv.width = size.w; cv.height = size.h;
     const ctx = cv.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high'; // texte tranchant après rotation
     ctx.fillStyle = fill;
     ctx.fillRect(0, 0, size.w, size.h);
     ctx.translate(size.w / 2, size.h / 2);
@@ -937,6 +978,8 @@
     const cvB = document.createElement('canvas');
     cvB.width = w; cvB.height = h;
     const ctxB = cvB.getContext('2d', { willReadFrequently: true });
+    ctxB.imageSmoothingEnabled = true;
+    ctxB.imageSmoothingQuality = 'high'; // fond lissé proprement
     ctxB.drawImage(cvT, 0, 0, w, h);
     const bd = ctxB.getImageData(0, 0, w, h).data;
 
