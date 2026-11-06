@@ -16,6 +16,18 @@
     return String(s).replace(/<[^>]*>/g, '');
   }
 
+  /* Paire $...$ « vraiment math » — même heuristique que hasMath() d'ocr.js
+     (dupliquée ici : ce module reste autonome sous Node). Sans ce filtre,
+     une phrase comme « 50 $ et 60 $ » perdait ses deux dollars à l'export .docx. */
+  function isMathLike(inner) {
+    const s = String(inner || '').trim();
+    if (!s || s.length > 80) return false;
+    if (/[\\^_{}=≈≤≥≠]/.test(s)) return true;
+    if (/[0-9][a-zA-Z]/.test(s)) return true;
+    if (/[0-9a-zA-Z)\]]\s*[+−–×÷*/]\s*[0-9a-zA-Z([]/.test(s)) return true;
+    return s.length === 1 && /[a-zA-Z]/.test(s);
+  }
+
   /* Découpe un texte en runs docx en gérant le LaTeX inline produit par l'OCR :
      $...$ -> contenu sans délimiteurs, _{...} -> indice, ^{...} -> exposant. */
   function textToRuns(text, st) {
@@ -24,6 +36,10 @@
     let last = 0;
     let m;
     while ((m = re.exec(text)) !== null) {
+      if (m[1] !== undefined && !isMathLike(m[1])) {
+        re.lastIndex = m.index + 1; // paire de $ de devise : texte tel quel, re-paire ensuite
+        continue;
+      }
       if (m.index > last) runs.push(new docx.TextRun({ text: text.slice(last, m.index), ...st }));
       if (m[1] !== undefined) runs.push(...textToRuns(m[1], st)); // $...$ : contenu retraité (indices/exposants)
       else if (m[2] !== undefined) runs.push(new docx.TextRun({ text: m[2], subScript: true, ...st }));

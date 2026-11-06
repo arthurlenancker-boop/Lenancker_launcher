@@ -159,10 +159,30 @@
     return p;
   }
 
+  /* Contenu « vraiment math » d'une paire $...$ : commande LaTeX, exposant,
+     indice, accolade, signe égal, coefficient collé (2x), opération (a + b)
+     ou variable isolée (x). Les devises — « 50 $ et 60 $ » — restent du texte :
+     sans ce filtre, KaTeX les rendait comme des maths et déformait la phrase. */
+  function isMathInner(inner) {
+    const s = String(inner || '').trim();
+    if (!s || s.length > 80) return false;
+    if (/[\\^_{}=≈≤≥≠]/.test(s)) return true;
+    if (/[0-9][a-zA-Z]/.test(s)) return true;
+    if (/[0-9a-zA-Z)\]]\s*[+−–×÷*/]\s*[0-9a-zA-Z([]/.test(s)) return true;
+    return s.length === 1 && /[a-zA-Z]/.test(s);
+  }
+
   /* true si le texte contient des maths (délimiteurs LaTeX). */
   function hasMath(text) {
     const s = String(text || '');
-    return s.includes('\\(') || s.includes('\\[') || /\$[^$\n]+\$/.test(s);
+    if (s.includes('\\(') || s.includes('\\[')) return true;
+    const re = /\$([^$\n]+)\$/g;
+    let m;
+    while ((m = re.exec(s)) !== null) {
+      if (isMathInner(m[1])) return true;
+      re.lastIndex = m.index + 1; // le $ qui ouvrait était une devise : re-paire depuis lui
+    }
+    return false;
   }
 
   let katexPromise = null;
