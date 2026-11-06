@@ -19,11 +19,11 @@ Site publié (GitHub Pages) : **https://arthurlenancker-boop.github.io/Lenancker
 ```
 ├── index.html                  ← accueil du launcher (grille d'apps)
 ├── manifest.webmanifest        ← PWA (installable Android)
-├── sw.js                       ← service worker (fonctionnement hors-ligne)
+├── sw.js                       ← service worker (hors-ligne ; pré-cache tolérant : un asset raté ne casse pas le reste)
 ├── assets/
 │   ├── css/design.css          ← design system partagé (tokens, glass, animations)
 │   ├── js/apps.js              ← registre des apps (ajouter une app = 1 entrée ici)
-│   ├── js/common.js            ← toasts, icônes SVG, enregistrement du SW
+│   ├── js/common.js            ← toasts (avec action optionnelle), icônes SVG, enregistrement du SW, toast « mise à jour prête »
 │   ├── js/launcher.js          ← rendu de la grille d'accueil
 │   ├── fonts/                  ← Inter embarquée (woff2)
 │   ├── icons/                  ← icônes PWA (PNG 192/512/maskable, favicon SVG)

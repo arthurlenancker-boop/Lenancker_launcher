@@ -121,17 +121,37 @@
     if (!zone) {
       zone = document.createElement('div');
       zone.className = 'toast-zone';
+      zone.setAttribute('role', 'status');
+      zone.setAttribute('aria-live', 'polite');
       document.body.appendChild(zone);
     }
     return zone;
   }
-  window.toast = function (message, kind = 'info', ms = 3800) {
+  /* action (optionnel) : { label, onClick } — affiche un bouton dans le toast
+     (ex. « Recharger » quand une mise à jour est prête). */
+  window.toast = function (message, kind = 'info', ms = 3800, action) {
     const zone = ensureZone();
     const el = document.createElement('div');
     el.className = `toast ${kind}`;
-    el.textContent = message;
+    const msg = document.createElement('span');
+    msg.className = 'toast-msg';
+    msg.textContent = message;
+    el.appendChild(msg);
+    if (action && action.label && typeof action.onClick === 'function') {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'toast-action';
+      btn.textContent = action.label;
+      btn.addEventListener('click', () => {
+        el.remove();
+        try { action.onClick(); } catch { /* action propre au contexte */ }
+      });
+      el.appendChild(btn);
+      ms = Math.max(ms, 12000); // reste lisible le temps de cliquer
+    }
     zone.appendChild(el);
     setTimeout(() => {
+      if (!el.isConnected) return;
       el.classList.add('out');
       el.addEventListener('animationend', () => el.remove(), { once: true });
     }, ms);
@@ -143,7 +163,27 @@
     window.addEventListener('load', () => {
       const script = document.querySelector('script[src$="common.js"]');
       const swUrl = script ? new URL('../../sw.js', script.src).href : 'sw.js';
-      navigator.serviceWorker.register(swUrl).catch(() => { /* mode dev/file:// */ });
+      navigator.serviceWorker.register(swUrl)
+        .then((reg) => {
+          /* Mise à jour prête : une nouvelle version a fini de s’installer
+             pendant que l’ancienne contrôle la page (le nouveau SW prend le
+             contrôle via skipWaiting, mais les fichiers déjà chargés viennent
+             encore de l’ancien cache). On propose le rechargement — jamais
+             forcé : une session Focus ou une file OCR ne doit pas sauter. */
+          reg.addEventListener('updatefound', () => {
+            const w = reg.installing;
+            if (!w) return;
+            w.addEventListener('statechange', () => {
+              if (w.state === 'installed' && navigator.serviceWorker.controller) {
+                window.toast('Une mise à jour du launcher est prête — recharge quand tu veux pour en profiter.', 'info', 20000, {
+                  label: 'Recharger',
+                  onClick: () => window.location.reload(),
+                });
+              }
+            });
+          });
+        })
+        .catch(() => { /* mode dev/file:// */ });
     });
   }
 })();

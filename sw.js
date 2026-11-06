@@ -1,7 +1,7 @@
 /* Service worker du Lenancker Launcher.
    Stratégie : cache-first pour les assets statiques (le launcher doit
    rester utilisable hors-ligne), réseau direct pour l'API Mistral. */
-const VERSION = 'lenancker-v8';
+const VERSION = 'lenancker-v9';
 const CORE = [
   './',
   'index.html',
@@ -63,7 +63,16 @@ const CORE = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(VERSION)
-      .then((cache) => cache.addAll(CORE))
+      /* Pré-cache tolérant : chaque asset est mis en cache individuellement.
+         Un fichier injoignable à l’installation (réseau en berne) ne casse
+         plus tout le hors-ligne : le reste est servi depuis le cache, et le
+         manquant sera mis en cache au premier accès réussi, par le fetch
+         handler ci-dessous. */
+      .then((cache) => Promise.allSettled(CORE.map((url) => cache.add(url))))
+      .then((results) => {
+        const missed = results.filter((r) => r.status === 'rejected').length;
+        if (missed) console.warn('[sw] ' + missed + " fichier(s) non mis en cache à l’installation — récupérés au premier accès.");
+      })
       .then(() => self.skipWaiting())
   );
 });
