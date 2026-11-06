@@ -11,10 +11,12 @@
   } else {
     root.PdfOcr = factory(root.PDFLib);
   }
-})(typeof self !== 'undefined' ? self : globalThis, function (PDFLib) {
+})(typeof self !== 'undefined' ? self : globalThis, function () {
   'use strict';
 
-  const { PDFDocument, StandardFonts } = PDFLib;
+  /* pdf-lib est résolu à l'usage (buildSearchablePdf) : ce module se charge
+     donc à vide sans lui, et reste utilisable pour les maths de redressement
+     (bestSkewAngle, rotationSize) qui servent avant tout export PDF. */
 
   const A4_LONG_PT = 841.89;  // côté long d'une page A4
   const A4_RATIO = 210 / 297; // côté court / côté long
@@ -125,6 +127,10 @@
      }]
      -> Uint8Array du PDF. */
   async function buildSearchablePdf(pages, title) {
+    const scope = typeof self !== 'undefined' ? self : globalThis;
+    const lib = scope.PDFLib;
+    if (!lib) throw new Error('pdf-lib non chargé — export PDF indisponible.');
+    const { PDFDocument, StandardFonts } = lib;
     const doc = await PDFDocument.create();
     doc.setProducer('Lenancker Launcher — OCR Mistral');
     if (title) doc.setTitle(title);
@@ -189,11 +195,77 @@
     return { top, right, bottom, left };
   }
 
+  /* ---------- Redressement des scans penchés : maths pures (testables sous Node) ----------
+     Méthode classique du profil de projection : les lignes de texte forment un
+     peigne régulier ; pour l'angle qui aligne le profil horizontal sur les lignes,
+     la variance des comptes par ligne binner est maximale.
+     xs, ys : coordonnées (px) des pixels d'encre dans l'image réduite ; w, h :
+     dimensions de cette image réduite. Signe : angle > 0 = texte qui descend
+     vers la droite ; pour l'aplatir, rotation canvas de -angle (radians). */
+  const D2R = Math.PI / 180;
+
+  function bestSkewAngle(xs, ys, w, h) {
+    const n = xs ? xs.length : 0;
+    if (!ys || n !== ys.length || n < 256) return null;
+    const margin = Math.ceil(Math.tan(6 * D2R) * (w / 2)) + 2; // décalage max introduit à ±6°
+    const binLen = (h | 0) + 2 * margin;
+    const bins = new Uint32Array(binLen);
+    const rel = new Float32Array(n);
+    for (let i = 0; i < n; i++) rel[i] = xs[i] - w / 2;
+
+    const score = (deg) => {
+      bins.fill(0);
+      const k = Math.tan(deg * D2R);
+      for (let i = 0; i < n; i++) {
+        // recentrage par la marge : chaque point reste dans [0, binLen-1],
+        // aucun angle n'est favorisé par des lignes entassées en bord de profil
+        const b = (ys[i] - k * rel[i] + margin) | 0;
+        bins[b < 0 ? 0 : b >= binLen ? binLen - 1 : b]++;
+      }
+      let s = 0;
+      for (let j = 0; j < binLen; j++) { const v = bins[j]; s += v * v; }
+      return s;
+    };
+
+    // 1. recherche grossière ±6° au pas de 0,25°
+    let best = 0, bestS = -1;
+    for (let d = -6; d <= 6.0001; d += 0.25) {
+      const s = score(d);
+      if (s > bestS) { bestS = s; best = d; }
+    }
+    // 2. recherche fine ±0,3° autour du meilleur, pas de 0,05°
+    let fine = best, fineS = bestS;
+    for (let d = best - 0.3; d <= best + 0.3001; d += 0.05) {
+      const s = score(d);
+      if (s > fineS) { fineS = s; fine = d; }
+    }
+    const s0 = score(0);
+    const gain = s0 > 0 ? fineS / s0 : 1;
+    if (gain < 1.06) return null; // pas de peigne net : photo sans lignes, page à peine texturée…
+    if (Math.abs(fine) < 0.3 || Math.abs(fine) > 6) return null; // déjà droit, ou hors plage
+    return { angle: Math.round(fine * 100) / 100, gain: Math.round(gain * 100) / 100 };
+  }
+
+  /* Dimensions du canevas contenant l'image tournée d'angleDeg sans aucune
+     perte : un même { w, h, angle } redonne toujours les mêmes dimensions,
+     en intake comme à l'export PDF (les bbox OCR restent ainsi alignés). */
+
+  function rotationSize(w, h, angleDeg) {
+    const a = Math.abs(angleDeg) * D2R;
+    const c = Math.cos(a), s = Math.sin(a);
+    return {
+      w: Math.max(1, Math.round(w * c + h * s)),
+      h: Math.max(1, Math.round(w * s + h * c)),
+    };
+  }
+
   return {
     buildSearchablePdf,
     toWinAnsi,
     cleanBlockContent,
     pickPageSize,
     insetsFromProfiles,
+    bestSkewAngle,
+    rotationSize,
   };
 });

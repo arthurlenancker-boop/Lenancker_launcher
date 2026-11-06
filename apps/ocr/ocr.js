@@ -10,6 +10,7 @@
   const LS_IMAGES = 'lenancker.ocr.includeImages';
   const LS_TRIM = 'lenancker.ocr.trimPage';
   const LS_HF = 'lenancker.ocr.cleanHf';
+  const LS_DESKEW = 'lenancker.ocr.deskew';
   const MAX_FILE_BYTES = 50 * 1024 * 1024; // limite API Mistral : 50 Mo
   const WARN_FILE_BYTES = 20 * 1024 * 1024;
 
@@ -43,7 +44,7 @@
     run: $('run-ocr'), clear: $('clear-files'), queueCount: $('queue-count'),
     progressWrap: $('progress-wrap'), progressBar: $('progress-bar'),
     results: $('results'), empty: $('empty-results'), copyAll: $('copy-all'),
-    includeImages: $('include-images'), trimPage: $('trim-page'), cleanHf: $('clean-hf'), pdfAll: $('pdf-all'),
+    includeImages: $('include-images'), trimPage: $('trim-page'), cleanHf: $('clean-hf'), deskew: $('deskew'), pdfAll: $('pdf-all'),
   };
   // Préférences persistées via la cascade de stockage (voir common.js) :
   // indisponible dans certains contextes, sans casser l'app.
@@ -65,6 +66,12 @@
     els.cleanHf.checked = store.get(LS_HF) !== '0'; // en-têtes/pieds de page écartés par défaut
     els.cleanHf.addEventListener('change', () => {
       store.set(LS_HF, els.cleanHf.checked ? '1' : '0');
+    });
+  }
+  if (els.deskew) {
+    els.deskew.checked = store.get(LS_DESKEW) !== '0'; // redressement actif par défaut
+    els.deskew.addEventListener('change', () => {
+      store.set(LS_DESKEW, els.deskew.checked ? '1' : '0');
     });
   }
   document.getElementById('brand-logo').innerHTML = window.iconSvg('scan');
@@ -208,11 +215,19 @@
     return docxPromise;
   }
 
+  let pdfOcrPromise = null;
+  function ensurePdfOcr() {
+    if (!pdfOcrPromise) {
+      pdfOcrPromise = loadScript('pdfocr.js').catch((e) => { pdfOcrPromise = null; throw e; });
+    }
+    return pdfOcrPromise;
+  }
+
   let pdfLibPromise = null;
   function ensurePdfLib() {
     if (!pdfLibPromise) {
       pdfLibPromise = loadScript('../../assets/vendor/pdf-lib.min.js')
-        .then(() => loadScript('pdfocr.js')) // pdfocr capture window.PDFLib : charger pdf-lib d'abord
+        .then(() => ensurePdfOcr())
         .catch((e) => { pdfLibPromise = null; throw e; });
     }
     return pdfLibPromise;
@@ -321,7 +336,7 @@
       if (file.size > WARN_FILE_BYTES) {
         window.toast(`${file.name} est volumineux (${fmtSize(file.size)}) : l’OCR peut prendre du temps.`, 'warn', 5200);
       }
-      queue.push({ id: ++seq, file, kind, status: 'pending', dataUrl: null, markdown: null, pages: 0, images: {}, imageDims: {}, confScore: null, error: null });
+      queue.push({ id: ++seq, file, kind, status: 'pending', dataUrl: null, markdown: null, pages: 0, images: {}, imageDims: {}, confScore: null, skew: 0, error: null });
       added++;
     }
     if (added) renderQueue();
@@ -749,17 +764,168 @@
     return { bytes: new Uint8Array(await blob.arrayBuffer()), mime: 'image/png' };
   }
 
-  /* Prépare la page PDF d'un scan : image d'origine + blocs OCR + détourage éventuel. */
-  async function buildPdfPageSpec(item) {
-    const bmp = await decodeBitmap(item.file);
+  /* ---------- Redressement des scans penchés (deskew) ----------
+     Estimation sur une copie réduite (600 px côté long) : luminance, seuil
+     d'Otsu calculé sur la zone centrale (exclut la table et les coins du
+     scanneur), pixels d'encre sous le seuil, puis meilleur angle par profil
+     de projection (pdfocr.bestSkewAngle). Retourne null si rien de net. */
+  async function estimateSkew(bmp) {
     try {
+      const { w: imgW, h: imgH } = bitmapDims(bmp);
+      if (!imgW || !imgH) return null;
+      const k = Math.min(1, 600 / Math.max(imgW, imgH));
+      const w = Math.max(64, Math.round(imgW * k));
+      const h = Math.max(64, Math.round(imgH * k));
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(bmp, 0, 0, w, h);
+      const data = ctx.getImageData(0, 0, w, h).data;
+
+      // zone centrale : le peigne de lignes, sans bords de table ni coins
+      const x0 = Math.floor(w * 0.12), x1 = Math.ceil(w * 0.88);
+      const y0 = Math.floor(h * 0.08), y1 = Math.ceil(h * 0.92);
+
+      // seuil d'Otsu sur la luminance de la zone centrale
+      const hist = new Uint32Array(256);
+      let count = 0;
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const i = (y * w + x) * 4;
+          hist[(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) | 0]++;
+          count++;
+        }
+      }
+      if (!count) return null;
+      let sum = 0;
+      for (let t = 0; t < 256; t++) sum += t * hist[t];
+      let sumB = 0, wB = 0, thr = 0, bestVar = -1;
+      for (let t = 0; t < 256; t++) {
+        wB += hist[t];
+        if (!wB) continue;
+        const wF = count - wB;
+        if (!wF) break;
+        sumB += t * hist[t];
+        const mB = sumB / wB, mF = (sum - sumB) / wF;
+        const v = wB * wF * (mB - mF) * (mB - mF);
+        if (v > bestVar) { bestVar = v; thr = t; }
+      }
+      if (thr >= 254) return null; // pas de séparation nette : image très sombre ou vide
+
+      // pixels d'encre sous le seuil (sous-échantillonnés s'ils sont trop nombreux)
+      let inkCount = 0;
+      for (let t = 0; t <= thr; t++) inkCount += hist[t];
+      if (inkCount < 256) return null;
+      const stride = Math.max(1, Math.ceil(inkCount / 90000));
+      const xs = [], ys = [];
+      let seen = 0;
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const i = (y * w + x) * 4;
+          if (((data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) | 0) > thr) continue;
+          if (seen++ % stride) continue;
+          xs.push(x); ys.push(y);
+        }
+      }
+      return window.PdfOcr.bestSkewAngle(Float32Array.from(xs), Float32Array.from(ys), w, h);
+    } catch {
+      return null; // estimation impossible : pas de redressement
+    }
+  }
+
+  /* Rotation d'image sans perte de contenu : canevas agrandi pour contenir
+     l'image tournée entière (pdfocr.rotationSize), coins remplis avec la
+     couleur moyenne du pourtour (souvent la table du scanneur). Déterministe :
+     l'envoi à l'API et l'export PDF produisent les mêmes pixels aux mêmes
+     coordonnées, donc les bbox OCR renvoyées restent alignées dans l'export. */
+  async function rotateImage(bmp, angleDeg) {
+    const { w, h } = bitmapDims(bmp);
+    const size = window.PdfOcr.rotationSize(w, h, angleDeg);
+
+    const cvS = document.createElement('canvas');
+    cvS.width = w; cvS.height = h;
+    const ctxS = cvS.getContext('2d', { willReadFrequently: true });
+    ctxS.drawImage(bmp, 0, 0);
+    let br = 0, bg = 0, bb = 0, bn = 0;
+    const stripMean = (sx, sy, sw, sh) => {
+      const d = ctxS.getImageData(sx, sy, sw, sh).data;
+      for (let i = 0; i < d.length; i += 4) { br += d[i]; bg += d[i + 1]; bb += d[i + 2]; bn++; }
+    };
+    stripMean(0, 0, w, 2); stripMean(0, Math.max(0, h - 2), w, 2);
+    stripMean(0, 0, 2, h); stripMean(Math.max(0, w - 2), 0, 2, h);
+    const fill = bn ? `rgb(${Math.round(br / bn)},${Math.round(bg / bn)},${Math.round(bb / bn)})` : '#0a0a0a';
+
+    const cv = document.createElement('canvas');
+    cv.width = size.w; cv.height = size.h;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = fill;
+    ctx.fillRect(0, 0, size.w, size.h);
+    ctx.translate(size.w / 2, size.h / 2);
+    ctx.rotate(-angleDeg * Math.PI / 180); // signe : aplatit un texte qui descend vers la droite
+    ctx.drawImage(bmp, -w / 2, -h / 2);
+    const blob = await new Promise((resolve) => cv.toBlob(resolve, 'image/jpeg', 0.92));
+    if (!blob) throw new Error('Rotation du scan impossible.');
+    return { blob, width: size.w, height: size.h };
+  }
+
+  function blobToDataURL(blob) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = () => reject(new Error('Lecture du fichier impossible.'));
+      r.readAsDataURL(blob);
+    });
+  }
+
+  /* Lecture d'une image pour l'API : si l'option est active et qu'un angle net
+     est détecté, l'image est redressée AVANT l'envoi. Elle devient la
+     référence de toute la suite — bbox OCR (calque texte), détourage et
+     export PDF tombent tous dans le repère de l'image redressée. */
+  async function prepareImage(item) {
+    item.skew = 0;
+    if (!els.deskew || !els.deskew.checked) return readAsDataURL(item.file);
+    let bmp = null;
+    try {
+      await ensurePdfOcr(); // bestSkewAngle / rotationSize, sans pdf-lib
+      bmp = await decodeBitmap(item.file);
+      const est = await estimateSkew(bmp);
+      if (!est) return readAsDataURL(item.file);
+      const { blob } = await rotateImage(bmp, est.angle);
+      item.skew = est.angle;
+      return blobToDataURL(blob);
+    } catch {
+      return readAsDataURL(item.file); // redressement impossible : image d'origine
+    } finally {
+      if (bmp && bmp.close) { try { bmp.close(); } catch { /* déjà fermée */ } }
+    }
+  }
+
+  /* Prépare la page PDF d'un scan : image de référence (redressée si le scan
+     était penché — les blocs OCR sont déjà dans son repère), détourage éventuel. */
+  async function buildPdfPageSpec(item) {
+    let bytes = null, mime = null, bmp = null;
+    try {
+      if (item.skew) {
+        const raw = await decodeBitmap(item.file);
+        let blob = null;
+        try {
+          blob = (await rotateImage(raw, item.skew)).blob;
+        } finally {
+          if (raw && raw.close) { try { raw.close(); } catch { /* déjà fermée */ } }
+        }
+        bytes = new Uint8Array(await blob.arrayBuffer());
+        mime = 'image/jpeg';
+        bmp = await decodeBitmap(blob); // mêmes géométrie et coordonnées que l'image envoyée à l'API
+      } else {
+        bmp = await decodeBitmap(item.file);
+      }
       const { w, h } = bitmapDims(bmp);
       let trim = null;
       if (els.trimPage && els.trimPage.checked) trim = await detectPageTrim(item, bmp);
-      const { bytes, mime } = await toEmbeddableBytes(item.file, bmp);
+      if (!bytes) ({ bytes, mime } = await toEmbeddableBytes(item.file, bmp));
       return { bytes, mime, widthPx: w, heightPx: h, dpi: item.dpi || null, trim, segments: item.segments || [] };
     } finally {
-      if (bmp.close) { try { bmp.close(); } catch { /* déjà fermée */ } }
+      if (bmp && bmp.close) { try { bmp.close(); } catch { /* déjà fermée */ } }
     }
   }
 
@@ -794,7 +960,11 @@
         const item = todo[cursor++];
         setItemStatus(item, 'working');
         try {
-          if (!item.dataUrl) item.dataUrl = await readAsDataURL(item.file);
+          if (!item.dataUrl) {
+            item.dataUrl = item.kind === 'image'
+              ? await prepareImage(item)
+              : await readAsDataURL(item.file);
+          }
           await callOcr(item, key, 1);
           item.status = 'ok';
           item.dataUrl = null; // libère le base64 en mémoire (jusqu'à ~67 Mo par PDF)
@@ -863,6 +1033,13 @@
       scoreSpan.title = pct >= 70
         ? 'Fiabilité de la page la moins sûre du document (score renvoyé par l\u2019API Mistral)'
         : 'Page la moins sûre du document (score de reconnaissance renvoyé par l\u2019API Mistral) : relis ce texte';
+    }
+
+    const box = item.kind === 'image' && item.skew ? document.createElement('span') : null;
+    if (box) {
+      box.className = 'rpages';
+      box.textContent = `redressé ${String(Math.abs(item.skew)).replace('.', ',')}°`;
+      box.title = `Scan incliné de ${String(Math.abs(item.skew)).replace('.', ',')}° — image redressée avant l'analyse (texte, tableaux et calque texte alignés).`;
     }
 
     const seg = document.createElement('span');
@@ -934,6 +1111,7 @@
 
     head.append(name, pages);
     if (scoreSpan) head.append(scoreSpan);
+    if (box) head.append(box);
     head.append(seg, btnCopy, btnHtml, btnDl, btnDocx);
     if (item.kind === 'image') head.append(btnPdf);
 
