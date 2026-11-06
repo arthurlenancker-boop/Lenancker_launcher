@@ -7,9 +7,9 @@
    UMD : window.PdfOcr dans le navigateur, module.exports sous Node (tests). */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory(root.PDFLib);
+    module.exports = factory();
   } else {
-    root.PdfOcr = factory(root.PDFLib);
+    root.PdfOcr = factory();
   }
 })(typeof self !== 'undefined' ? self : globalThis, function () {
   'use strict';

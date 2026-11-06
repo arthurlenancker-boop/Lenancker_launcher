@@ -36,7 +36,7 @@
     focusView: $('focus-view'), breakView: $('break-view'),
     cut: $('btn-cut'), dist: $('btn-dist'), resume: $('btn-resume'), finish: $('btn-finish'),
     finishEarly: $('btn-finish-early'),
-    cutHint: $('cut-hint'), breakTitle: $('break-title'), breakIdea: $('break-idea'),
+    breakTitle: $('break-title'), breakIdea: $('break-idea'),
     breakPomHint: $('break-pom-hint'),
     doneCard: $('done-card'), doneStats: $('done-stats'), donePoints: $('done-points'),
     doneRewardLead: $('done-reward-lead'), doneReward: $('done-reward'),

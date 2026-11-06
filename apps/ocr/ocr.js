@@ -787,12 +787,13 @@
     return { segments, rects };
   }
 
-  /* Décode un fichier image en bitmap pour le canvas (dims + détourage). */
-  async function decodeBitmap(file) {
+  /* Décode une image en bitmap pour le canvas (dims + prétraitements).
+     Accepte aussi bien un File (fichier d'origine) qu'un Blob (canvas JPEG). */
+  async function decodeBitmap(blob) {
     if (window.createImageBitmap) {
-      try { return await createImageBitmap(file); } catch { /* repli <img> */ }
+      try { return await createImageBitmap(blob); } catch { /* repli <img> */ }
     }
-    const url = URL.createObjectURL(file);
+    const url = URL.createObjectURL(blob);
     const img = new Image();
     img.decoding = 'async';
     try {
