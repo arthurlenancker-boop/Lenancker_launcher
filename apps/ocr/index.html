@@ -104,8 +104,15 @@
       </div>
       <p class="small muted" style="margin:0.6rem 0 0">Les scans penchés sont redressés automatiquement avant l&rsquo;analyse (angle signalé sur la carte résultat).</p>
 
-      <div class="progress hidden" id="progress-wrap" role="progressbar" aria-label="Progression de l'OCR">
-        <div class="progress-bar" id="progress-bar"></div>
+      <div class="progress-wrap hidden" id="progress-wrap" role="progressbar" aria-label="Progression de l'OCR" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="progress-meta">
+          <span class="progress-label" id="progress-label">Analyse en cours…</span>
+          <span class="progress-count" id="progress-count"></span>
+        </div>
+        <div class="progress-track" aria-hidden="true">
+          <div class="progress-bar" id="progress-bar"></div>
+          <div class="progress-sheen"></div>
+        </div>
       </div>
     </section>
 

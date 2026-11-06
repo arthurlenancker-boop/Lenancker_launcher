@@ -85,24 +85,64 @@ code.mono, .mono code { font-size: 0.85em; }
 .file-item .fmove:hover:not(:disabled) { color: var(--accent); background: rgba(255, 83, 16, 0.12); }
 .file-item .fmove:disabled { opacity: 0.3; cursor: default; }
 
-/* --- Progress --- */
-.progress {
-  margin-top: 1rem; height: 7px; border-radius: 999px;
-  background: rgba(242, 239, 231, 0.08); overflow: hidden;
+/* --- Progress — barre de progression du scan --- */
+.progress-wrap { margin-top: 1.15rem; transition: opacity 0.45s var(--ease); }
+.progress-wrap.fade { opacity: 0; }
+.progress-meta {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 0.8rem;
+  margin-bottom: 0.45rem;
+}
+.progress-label {
+  font-size: 0.8rem; color: var(--ink-dim); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.progress-count {
+  flex: none; font-size: 0.76rem; font-weight: 700; color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.progress-wrap.done .progress-count { color: var(--ok); }
+.progress-track {
+  position: relative; height: 10px; border-radius: 999px; overflow: hidden;
+  background: rgba(242, 239, 231, 0.07);
+  box-shadow: inset 0 0 0 1px rgba(242, 239, 231, 0.05), inset 0 1px 3px rgba(0, 0, 0, 0.55);
 }
 .progress-bar {
   height: 100%; width: 0%;
-  background: var(--accent);
-  border-radius: 999px;
-  transition: width 0.4s var(--ease);
-  position: relative;
+  border-radius: 999px; position: relative;
+  background: linear-gradient(92deg, #b23c0c, var(--accent) 55%, #ff9a63);
+  box-shadow: 0 0 14px rgba(255, 83, 16, 0.45);
+  transition: width 0.5s var(--ease), background 0.35s ease, box-shadow 0.35s ease;
 }
-.progress-bar::after {
-  content: ''; position: absolute; inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(22, 11, 5, 0.35), transparent);
-  animation: shimmer 1.4s linear infinite;
+.progress-wrap.done .progress-bar {
+  background: linear-gradient(92deg, #43794f, var(--ok) 60%, #a9dcae);
+  box-shadow: 0 0 14px rgba(123, 196, 127, 0.4);
 }
-@keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+/* lueur « comète » portée par le bord d'avancement pendant le scan */
+.progress-wrap.running .progress-bar::after {
+  content: ''; position: absolute; right: 0; top: 50%;
+  width: 6px; height: 2.1em; border-radius: 999px;
+  transform: translate(40%, -50%);
+  background: radial-gradient(closest-side, rgba(255, 205, 160, 0.95), rgba(255, 83, 16, 0));
+  filter: blur(1px);
+}
+/* reflet qui balaie la piste pendant le scan */
+.progress-sheen {
+  position: absolute; inset: 0; pointer-events: none;
+  opacity: 0; transition: opacity 0.3s ease;
+}
+.progress-wrap.running .progress-sheen { opacity: 1; }
+.progress-sheen::before {
+  content: ''; position: absolute; top: 0; bottom: 0; width: 36%;
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+  transform: translateX(-140%);
+  animation: progress-scan 1.35s linear infinite;
+}
+@keyframes progress-scan { to { transform: translateX(340%); } }
+@media (prefers-reduced-motion: reduce) {
+  .progress-wrap { transition: none; }
+  .progress-bar { transition: none; }
+  .progress-sheen::before { animation: none; }
+}
 
 /* --- Résultats --- */
 .empty-state { padding: 1.8rem; text-align: center; border-style: dashed; }

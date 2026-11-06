@@ -43,6 +43,7 @@
     dropzone: $('dropzone'), fileInput: $('file-input'), queueList: $('file-queue'),
     run: $('run-ocr'), clear: $('clear-files'), queueCount: $('queue-count'),
     progressWrap: $('progress-wrap'), progressBar: $('progress-bar'),
+    progressLabel: $('progress-label'), progressCount: $('progress-count'),
     results: $('results'), empty: $('empty-results'), copyAll: $('copy-all'),
     includeImages: $('include-images'), trimPage: $('trim-page'), cleanHf: $('clean-hf'),
     modeOcr: $('mode-ocr'), modeIa: $('mode-ia'), modeHint: $('mode-hint'), pdfAll: $('pdf-all'),
@@ -1088,6 +1089,55 @@
     }
   }
 
+  /* ---------- Progression du scan ----------
+     Barre à deux états : « running » (remplissage dégradé, comète sur le
+     bord d'avancement, reflet balayant la piste) puis « done » (dégradé
+     vert, chiffres validés) ; fondu puis masquée deux secondes plus tard. */
+  let progressTimer = null;
+
+  function setProgress(done, total) {
+    const safeTotal = Math.max(1, total);
+    const pct = Math.round((done / safeTotal) * 100);
+    els.progressBar.style.width = `${pct}%`;
+    els.progressWrap.setAttribute('aria-valuenow', String(pct));
+    els.progressWrap.setAttribute('aria-valuetext',
+      `${done} sur ${safeTotal} document${safeTotal > 1 ? 's' : ''} analysé${done > 1 ? 's' : ''}`);
+    if (els.progressCount) {
+      els.progressCount.textContent = `${done}/${safeTotal} document${safeTotal > 1 ? 's' : ''}`;
+    }
+  }
+
+  function setProgressLabel(txt) {
+    if (els.progressLabel) els.progressLabel.textContent = txt;
+  }
+
+  function startProgress(total) {
+    clearTimeout(progressTimer);
+    els.progressWrap.classList.remove('hidden', 'done', 'fade');
+    els.progressWrap.classList.add('running');
+    els.progressBar.style.width = '0%';
+    setProgress(0, total);
+    setProgressLabel('Analyse en cours…');
+  }
+
+  function finishProgress() {
+    const okN = queue.filter((q) => q.status === 'ok').length;
+    const errN = queue.filter((q) => q.status === 'err').length;
+    els.progressWrap.classList.remove('running');
+    els.progressWrap.classList.add('done');
+    setProgressLabel(errN
+      ? `Terminé — ${okN} document${okN > 1 ? 's' : ''} analysé${okN > 1 ? 's' : ''}, ${errN} en échec`
+      : `Analyse terminée — ${okN} document${okN > 1 ? 's' : ''} traité${okN > 1 ? 's' : ''}`);
+    progressTimer = setTimeout(() => {
+      els.progressWrap.classList.add('fade');
+      progressTimer = setTimeout(() => {
+        els.progressWrap.classList.add('hidden');
+        els.progressWrap.classList.remove('fade', 'done');
+        els.progressBar.style.width = '0%';
+      }, 450);
+    }, 2400);
+  }
+
   /* ---------- Lancement ---------- */
   els.run.addEventListener('click', async () => {
     const key = getKey();
@@ -1101,13 +1151,13 @@
 
     running = true;
     els.run.classList.add('loading');
-    els.progressWrap.classList.remove('hidden');
+    startProgress(todo.length);
     renderQueue();
 
     let done = queue.filter((q) => q.status === 'ok').length;
     const total = done + todo.length;
     const updateProgress = () => {
-      els.progressBar.style.width = `${Math.round((done / total) * 100)}%`;
+      setProgress(done, total);
     };
     updateProgress();
 
@@ -1118,6 +1168,7 @@
       while (cursor < todo.length) {
         const item = todo[cursor++];
         setItemStatus(item, 'working');
+        setProgressLabel(`Analyse : ${item.file.name}`);
         try {
           if (!item.dataUrl) {
             item.dataUrl = item.kind === 'image'
@@ -1159,6 +1210,7 @@
     els.run.classList.remove('loading');
     renderQueue();
     refreshResultsVisibility();
+    finishProgress();
   });
 
   /* ---------- Résultats ---------- */
