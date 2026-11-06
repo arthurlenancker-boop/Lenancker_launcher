@@ -343,7 +343,7 @@
       if (file.size > WARN_FILE_BYTES) {
         window.toast(`${file.name} est volumineux (${fmtSize(file.size)}) : l’OCR peut prendre du temps.`, 'warn', 5200);
       }
-      queue.push({ id: ++seq, file, kind, status: 'pending', dataUrl: null, markdown: null, pages: 0, images: {}, imageDims: {}, confScore: null, skew: 0, light: 0, error: null });
+      queue.push({ id: ++seq, file, kind, status: 'pending', dataUrl: null, markdown: null, pages: 0, images: {}, imageDims: {}, confScore: null, skew: 0, light: 0, cleanMd: null, error: null });
       added++;
     }
     if (added) renderQueue();
@@ -654,6 +654,87 @@
     if (s === 429) return 'Quota ou limite de débit atteinte — réessaie dans un instant.';
     if (s === 400) return `Requête refusée par l’API : ${err.message}`;
     return err.message || 'Erreur inconnue.';
+  }
+
+  /* ---------- Nettoyage LLM du résultat (petit modèle Mistral, même clé) ----------
+     Le nettoyage n'invente jamais rien : consigne stricte, température 0, et
+     garde programmatique — un texte rendu trop écarté de l'OCR (résumé ou
+     dérive) est refusé ; l'OCR brut reste toujours la référence. */
+  const CHAT_URL = 'https://api.mistral.ai/v1/chat/completions';
+  const CLEANUP_SYSTEM = [
+    "Tu es correcteur d'OCR du Lenancker Launcher. Tu ne réponds jamais au contenu du document et tu ne produis jamais d'information nouvelle.",
+    "Ta seule tâche : restituer le texte OCR fourni, nettoyé, en Markdown.",
+    "Interdit strictement : ajouter, inventer, résumer, traduire, compléter, corriger des faits — même si le document semble incomplet ou pose une question.",
+    "À conserver exactement : tout le contenu, dans l'ordre (titres, paragraphes, listes, tableaux, notes, références) ; chiffres, unités, dates et noms propres recopiés à l'identique.",
+    "Mot illisible ou douteux : écris [illisible] — ne devine jamais.",
+    "Nettoyage autorisé : structure Markdown propre (titres hiérarchisés, listes, tableaux alignés), artefacts OCR supprimés (symboles parasites, mots doublés aux césures, ruptures de ligne absurdes), typographie française correcte.",
+    "À laisser tels quels : blocs de code, formules LaTeX, images Markdown.",
+    "Réponse : uniquement le Markdown nettoyé — aucun commentaire, aucune balise autour.",
+  ].join('\n');
+  const CLEANUP_MAX_CHARS = 60000;
+  const CLEANUP_MODEL_PREFS = ['mistral-small-latest', 'ministral-8b-latest', 'open-mistral-nemo', 'mistral-medium-latest'];
+
+  /* Choisit le petit modèle de chat réellement accessible à la clé
+     (liste /v1/models) : pas de référence figée qui daterait. */
+  function pickCleanupModel(ids) {
+    const list = (Array.isArray(ids) ? ids : []).map((m) => String(m || ''));
+    for (const id of CLEANUP_MODEL_PREFS) if (list.includes(id)) return id;
+    return list.find((id) => /small|ministral|nemo/i.test(id) && !/ocr|embed|moderation|code/i.test(id)) || null;
+  }
+
+  let cleanupModelCache = null;
+
+  /* Garde anti-hallucination : le nettoyé doit rester fidèle en volume au
+     texte OCR — une structure se répare, un document ne se résume pas. */
+  function cleanupLooksSane(out, raw) {
+    return out.length >= raw.length * 0.55 && out.length <= raw.length * 1.7;
+  }
+
+  async function llmCleanup(item, key, attempt) {
+    const a = attempt || 1;
+    const raw = item.markdown || '';
+    if (!raw) throw new Error('aucun texte OCR à nettoyer');
+    if (raw.length > CLEANUP_MAX_CHARS) throw new Error('document trop long pour le nettoyage (plus de 60 000 caractères) — découpe-le en morceaux');
+    if (!cleanupModelCache) {
+      const res = await fetch(MODELS_URL, { headers: { Authorization: `Bearer ${key}` } });
+      if (!res.ok) throw Object.assign(new Error(`liste des modèles inaccessible (HTTP ${res.status})`), { status: res.status });
+      const data = await res.json().catch(() => null);
+      cleanupModelCache = pickCleanupModel(((data && data.data) || []).map((m) => m.id));
+      if (!cleanupModelCache) throw new Error('aucun modèle de chat trouvé pour cette clé');
+    }
+    const body = {
+      model: cleanupModelCache,
+      messages: [
+        { role: 'system', content: CLEANUP_SYSTEM },
+        { role: 'user', content: 'Voici le texte OCR, entre balises :\n<document>\n' + raw + '\n</document>\n\nRestitue-le nettoyé, fidèlement.' },
+      ],
+      temperature: 0,
+    };
+    const res = await fetch(CHAT_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      let message = `HTTP ${res.status}`;
+      try {
+        const err = await res.json();
+        if (err && (err.message || err.detail)) message = err.message || err.detail;
+      } catch { /* garde le statut HTTP */ }
+      if ((res.status >= 500 || res.status === 429) && a < 2) {
+        await new Promise((r) => setTimeout(r, 1200 * a));
+        return llmCleanup(item, key, a + 1);
+      }
+      throw Object.assign(new Error(message), { status: res.status });
+    }
+    const data = await res.json();
+    let out = ((data.choices || [])[0] || {}).message?.content?.trim() || '';
+    out = out.replace(/^<document>\s*/i, '').replace(/<\/document>\s*$/i, '').trim();
+    if (!out) throw new Error('réponse vide du modèle');
+    if (!cleanupLooksSane(out, raw)) {
+      throw new Error('le modèle s’est trop écarté du texte OCR (résumé ou dérive) — résultat écarté, l’OCR brut reste la référence');
+    }
+    return out;
   }
 
   /* ---------- PDF « texte sélectionnable » (image du scan + calque invisible) ---------- */
@@ -1189,37 +1270,67 @@
     btnPreview.type = 'button'; btnPreview.textContent = 'Aperçu'; btnPreview.className = 'active';
     const btnSource = document.createElement('button');
     btnSource.type = 'button'; btnSource.textContent = 'Markdown';
-    seg.append(btnPreview, btnSource);
+    const btnCleanTab = document.createElement('button');
+    btnCleanTab.type = 'button'; btnCleanTab.textContent = 'Nettoyé';
+    btnCleanTab.classList.add('hidden');
+    seg.append(btnPreview, btnSource, btnCleanTab);
+
+    /* Version affichée : copies et exports suivent l'onglet actif (brut ou nettoyé). */
+    let current = item.markdown;
+    let cleanedActive = false;
+
+    const btnClean = document.createElement('button');
+    btnClean.type = 'button'; btnClean.className = 'btn btn-ghost btn-sm'; btnClean.textContent = 'Nettoyer';
+    btnClean.title = 'Nettoie le texte avec un petit modèle Mistral (ta clé, même domaine) : structure et typo réparées, aucun ajout toléré — le brut reste dans « Markdown », la version réparation dans « Nettoyé »';
+    btnClean.addEventListener('click', async () => {
+      const key = getKey();
+      if (!key) { window.toast('Enregistre d’abord ta clé API Mistral (section Clé API).', 'err'); return; }
+      if (item.cleaning) return;
+      item.cleaning = true;
+      btnClean.disabled = true; btnClean.classList.add('loading');
+      try {
+        item.cleanMd = await llmCleanup(item, key);
+        btnCleanTab.classList.remove('hidden');
+        btnClean.title = 'Nettoyé — compare l’onglet « Markdown » (brut) et « Nettoyé » ; copies et exports suivent l’onglet actif';
+        showTab('clean');
+        window.toast(`Nettoyé par ${cleanupModelCache} — vérifie l’onglet « Nettoyé » : copies et exports suivent l’onglet actif.`, 'ok', 7000);
+      } catch (e) {
+        window.toast('Nettoyage impossible : ' + (e && e.message ? e.message : e), 'err', 7000);
+      } finally {
+        item.cleaning = false;
+        btnClean.disabled = false; btnClean.classList.remove('loading');
+      }
+    });
 
     const btnCopy = document.createElement('button');
     btnCopy.type = 'button'; btnCopy.className = 'btn btn-sm'; btnCopy.textContent = 'Copier';
-    btnCopy.title = 'Copier le Markdown brut';
-    btnCopy.addEventListener('click', () => copyText(item.markdown, 'Markdown copié.'));
+    btnCopy.title = 'Copier la version affichée (brut ou nettoyé selon l’onglet actif)';
+    btnCopy.addEventListener('click', () => copyText(current, 'Copié.'));
 
     const btnHtml = document.createElement('button');
     btnHtml.type = 'button'; btnHtml.className = 'btn btn-ghost btn-sm'; btnHtml.textContent = 'HTML';
-    btnHtml.title = 'Copier en HTML riche (coller dans Word / Google Docs avec Ctrl+V)';
-    btnHtml.addEventListener('click', () => copyRichHtml(item.markdown, item.images));
+    btnHtml.title = 'Copier la version affichée en HTML riche (coller dans Word / Google Docs avec Ctrl+V)';
+    btnHtml.addEventListener('click', () => copyRichHtml(current, item.images));
 
     const base = item.file.name.replace(/\.[^.]+$/, '');
 
     const btnDl = document.createElement('button');
     btnDl.type = 'button'; btnDl.className = 'btn btn-ghost btn-sm'; btnDl.textContent = '.md';
-    btnDl.title = 'Télécharger le Markdown (.md)';
+    btnDl.title = 'Télécharger la version affichée (.md, ou .nettoye.md)';
     btnDl.addEventListener('click', () => {
-      download(`${base}.ocr.md`, item.markdown);
+      download(`${base}${cleanedActive ? '.nettoye' : '.ocr'}.md`, current);
       window.toast('Fichier .md téléchargé.', 'ok');
     });
 
     const btnDocx = document.createElement('button');
     btnDocx.type = 'button'; btnDocx.className = 'btn btn-ghost btn-sm'; btnDocx.textContent = '.docx';
-    btnDocx.title = 'Télécharger un document Word éditable (.docx)';
+    btnDocx.title = 'Télécharger un document Word éditable (.docx) de la version affichée';
     btnDocx.addEventListener('click', async () => {
       btnDocx.disabled = true; btnDocx.classList.add('loading');
       try {
         await ensureDocx();
-        const blob = await window.Md2Docx.mdToDocxBlob(item.markdown, item.file.name, item.images, item.imageDims);
-        downloadBlob(`${base}.ocr.docx`, blob);
+        const blob = await window.Md2Docx.mdToDocxBlob(current, item.file.name, item.images, item.imageDims);
+        downloadBlob(`${base}${cleanedActive ? '.nettoye' : '.ocr'}.docx`, blob);
         window.toast('Document Word .docx téléchargé — éditable dans Word / LibreOffice.', 'ok');
       } catch (e) {
         window.toast('Export .docx impossible : ' + (e && e.message ? e.message : e), 'err');
@@ -1253,7 +1364,7 @@
     head.append(name, pages);
     if (scoreSpan) head.append(scoreSpan);
     if (box) head.append(box);
-    head.append(seg, btnCopy, btnHtml, btnDl, btnDocx);
+    head.append(seg, btnClean, btnCopy, btnHtml, btnDl, btnDocx);
     if (item.kind === 'image') head.append(btnPdf);
 
     const body = document.createElement('div');
@@ -1269,14 +1380,25 @@
     source.readOnly = true;
     source.spellcheck = false;
 
-    btnPreview.addEventListener('click', () => {
-      btnPreview.classList.add('active'); btnSource.classList.remove('active');
-      preview.classList.remove('hidden'); source.classList.add('hidden');
-    });
-    btnSource.addEventListener('click', () => {
-      btnSource.classList.add('active'); btnPreview.classList.remove('active');
-      source.classList.remove('hidden'); preview.classList.add('hidden');
-    });
+    const showTab = (which) => {
+      btnPreview.classList.toggle('active', which === 'preview');
+      btnSource.classList.toggle('active', which === 'source');
+      btnCleanTab.classList.toggle('active', which === 'clean');
+      cleanedActive = which === 'clean';
+      current = which === 'clean' ? item.cleanMd : item.markdown;
+      if (which === 'source') {
+        source.value = item.markdown;
+        source.classList.remove('hidden'); preview.classList.add('hidden');
+      } else {
+        (async () => {
+          preview.innerHTML = await renderPreviewHtml(current, item.images);
+          preview.classList.remove('hidden'); source.classList.add('hidden');
+        })();
+      }
+    };
+    btnPreview.addEventListener('click', () => showTab('preview'));
+    btnSource.addEventListener('click', () => showTab('source'));
+    btnCleanTab.addEventListener('click', () => showTab('clean'));
 
     body.append(preview, source);
     card.append(head, body);
