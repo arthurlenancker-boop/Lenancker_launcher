@@ -11,6 +11,7 @@
   const LS_TRIM = 'lenancker.ocr.trimPage';
   const LS_HF = 'lenancker.ocr.cleanHf';
   const LS_DESKEW = 'lenancker.ocr.deskew';
+  const LS_LIGHT = 'lenancker.ocr.light';
   const MAX_FILE_BYTES = 50 * 1024 * 1024; // limite API Mistral : 50 Mo
   const WARN_FILE_BYTES = 20 * 1024 * 1024;
 
@@ -44,7 +45,7 @@
     run: $('run-ocr'), clear: $('clear-files'), queueCount: $('queue-count'),
     progressWrap: $('progress-wrap'), progressBar: $('progress-bar'),
     results: $('results'), empty: $('empty-results'), copyAll: $('copy-all'),
-    includeImages: $('include-images'), trimPage: $('trim-page'), cleanHf: $('clean-hf'), deskew: $('deskew'), pdfAll: $('pdf-all'),
+    includeImages: $('include-images'), trimPage: $('trim-page'), cleanHf: $('clean-hf'), deskew: $('deskew'), lightEven: $('light-even'), pdfAll: $('pdf-all'),
   };
   // Préférences persistées via la cascade de stockage (voir common.js) :
   // indisponible dans certains contextes, sans casser l'app.
@@ -72,6 +73,12 @@
     els.deskew.checked = store.get(LS_DESKEW) !== '0'; // redressement actif par défaut
     els.deskew.addEventListener('change', () => {
       store.set(LS_DESKEW, els.deskew.checked ? '1' : '0');
+    });
+  }
+  if (els.lightEven) {
+    els.lightEven.checked = store.get(LS_LIGHT) !== '0'; // uniformisation active par défaut
+    els.lightEven.addEventListener('change', () => {
+      store.set(LS_LIGHT, els.lightEven.checked ? '1' : '0');
     });
   }
   document.getElementById('brand-logo').innerHTML = window.iconSvg('scan');
@@ -336,7 +343,7 @@
       if (file.size > WARN_FILE_BYTES) {
         window.toast(`${file.name} est volumineux (${fmtSize(file.size)}) : l’OCR peut prendre du temps.`, 'warn', 5200);
       }
-      queue.push({ id: ++seq, file, kind, status: 'pending', dataUrl: null, markdown: null, pages: 0, images: {}, imageDims: {}, confScore: null, skew: 0, error: null });
+      queue.push({ id: ++seq, file, kind, status: 'pending', dataUrl: null, markdown: null, pages: 0, images: {}, imageDims: {}, confScore: null, skew: 0, light: 0, error: null });
       added++;
     }
     if (added) renderQueue();
@@ -512,7 +519,7 @@
   }
 
   /* ---------- Appel API Mistral OCR ---------- */
-  async function callOcr(item, key, attempt) {
+  async function callOcr(item, key, attempt, plain) {
     const includeImages = store.get(LS_IMAGES) === '1';
     const document = item.kind === 'image'
       ? { type: 'image_url', image_url: item.dataUrl }
@@ -526,6 +533,11 @@
       // qualité : score de reconnaissance renvoyé pour chaque page
       confidence_scores_granularity: 'page',
     };
+    if (!plain) {
+      // tables bien formées en markdown (paramètre des modèles récents ;
+      // si le modèle courant ne le connaît pas, on retente une fois sans lui)
+      body.table_format = 'markdown';
+    }
     if (els.cleanHf && els.cleanHf.checked) {
       // textes répétitifs de page (numéros, mentions) sortis du markdown
       body.extract_header = true;
@@ -549,7 +561,11 @@
       } catch { /* garde le statut HTTP */ }
       if ((res.status >= 500 || res.status === 429) && attempt < 2) {
         await new Promise((r) => setTimeout(r, 1500 * attempt + 1000));
-        return callOcr(item, key, attempt + 1);
+        return callOcr(item, key, attempt + 1, plain);
+      }
+      // modèle courant qui refuserait table_format : une seule retente, sans lui
+      if (res.status === 400 && !plain && /table[_ ]?format/i.test(message)) {
+        return callOcr(item, key, attempt, true);
       }
       throw Object.assign(new Error(message), { status: res.status });
     }
@@ -764,23 +780,30 @@
     return { bytes: new Uint8Array(await blob.arrayBuffer()), mime: 'image/png' };
   }
 
-  /* ---------- Redressement des scans penchés (deskew) ----------
-     Estimation sur une copie réduite (600 px côté long) : luminance, seuil
-     d'Otsu calculé sur la zone centrale (exclut la table et les coins du
-     scanneur), pixels d'encre sous le seuil, puis meilleur angle par profil
-     de projection (pdfocr.bestSkewAngle). Retourne null si rien de net. */
-  async function estimateSkew(bmp) {
+  /* ---------- Analyse d'image (pour redressement + éclairage) ----------
+     Une seule copie réduite (600 px côté long) sert aux deux estimations :
+     angle d'inclinaison (profil de projection sur l'encre) et hétérogénéité
+     d'éclairage (luminance moyenne par ligne/colonne). */
+  function analyzeImage(bmp) {
+    const { w: imgW, h: imgH } = bitmapDims(bmp);
+    if (!imgW || !imgH) return null;
+    const k = Math.min(1, 600 / Math.max(imgW, imgH));
+    const w = Math.max(64, Math.round(imgW * k));
+    const h = Math.max(64, Math.round(imgH * k));
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(bmp, 0, 0, w, h);
+    return { data: ctx.getImageData(0, 0, w, h).data, w, h };
+  }
+
+  /* Angle d'inclinaison : seuil d'Otsu sur la zone centrale (exclut la table
+     et les coins du scanneur), pixels d'encre sous le seuil, meilleur angle
+     par profil de projection (pdfocr.bestSkewAngle). null si rien de net. */
+  function estimateSkewFromAnalysis(an) {
     try {
-      const { w: imgW, h: imgH } = bitmapDims(bmp);
-      if (!imgW || !imgH) return null;
-      const k = Math.min(1, 600 / Math.max(imgW, imgH));
-      const w = Math.max(64, Math.round(imgW * k));
-      const h = Math.max(64, Math.round(imgH * k));
-      const cv = document.createElement('canvas');
-      cv.width = w; cv.height = h;
-      const ctx = cv.getContext('2d', { willReadFrequently: true });
-      ctx.drawImage(bmp, 0, 0, w, h);
-      const data = ctx.getImageData(0, 0, w, h).data;
+      if (!an) return null;
+      const { data, w, h } = an;
 
       // zone centrale : le peigne de lignes, sans bords de table ni coins
       const x0 = Math.floor(w * 0.12), x1 = Math.ceil(w * 0.88);
@@ -833,12 +856,40 @@
     }
   }
 
+  /* Hétérogénéité d'éclairage : p10/p90 de la luminance moyenne par ligne et
+     par colonne, on garde l'axe qui spread le plus (ombres latérales incluses). */
+  function lightSpreadFromAnalysis(an) {
+    try {
+      if (!an) return { p10: 255, p90: 255 };
+      const { data, w, h } = an;
+      const rows = new Float32Array(h), cols = new Float32Array(w);
+      for (let y = 0; y < h; y++) {
+        let s = 0;
+        for (let x = 0; x < w; x++) {
+          const i = (y * w + x) * 4;
+          const l = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+          s += l; cols[x] += l;
+        }
+        rows[y] = s / w;
+      }
+      const qs = (arr) => {
+        const sorted = Float32Array.from(arr).sort();
+        const q = (v) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(v * (sorted.length - 1))))];
+        return { p10: q(0.1), p90: q(0.9) };
+      };
+      const r = qs(rows), c = qs(cols);
+      return (c.p90 - c.p10) > (r.p90 - r.p10) ? c : r;
+    } catch {
+      return { p10: 255, p90: 255 }; // analyse impossible : rien à uniformiser
+    }
+  }
+
   /* Rotation d'image sans perte de contenu : canevas agrandi pour contenir
      l'image tournée entière (pdfocr.rotationSize), coins remplis avec la
-     couleur moyenne du pourtour (souvent la table du scanneur). Déterministe :
-     l'envoi à l'API et l'export PDF produisent les mêmes pixels aux mêmes
-     coordonnées, donc les bbox OCR renvoyées restent alignées dans l'export. */
-  async function rotateImage(bmp, angleDeg) {
+     couleur moyenne du pourtour (souvent la table du scanneur). Synchrone et
+     déterministe — l'envoi à l'API et l'export PDF obtiennent les mêmes
+     pixels aux mêmes coordonnées, donc les bbox OCR restent alignées. */
+  function rotateToCanvas(bmp, angleDeg) {
     const { w, h } = bitmapDims(bmp);
     const size = window.PdfOcr.rotationSize(w, h, angleDeg);
 
@@ -863,9 +914,40 @@
     ctx.translate(size.w / 2, size.h / 2);
     ctx.rotate(-angleDeg * Math.PI / 180); // signe : aplatit un texte qui descend vers la droite
     ctx.drawImage(bmp, -w / 2, -h / 2);
-    const blob = await new Promise((resolve) => cv.toBlob(resolve, 'image/jpeg', 0.92));
-    if (!blob) throw new Error('Rotation du scan impossible.');
-    return { blob, width: size.w, height: size.h };
+    return cv;
+  }
+
+  function canvasToJpeg(cv, quality) {
+    return new Promise((resolve, reject) => {
+      cv.toBlob((b) => (b ? resolve(b) : reject(new Error('Traitement de l’image impossible.'))), 'image/jpeg', quality == null ? 0.95 : quality);
+    });
+  }
+
+  /* Uniformisation d'éclairage (« divide filter ») : le fond est approché par
+     un très fort sous-échantillonnage (24×) remis à l'échelle, puis chaque
+     pixel est divisé par son fond local et remonté niveau papier
+     (pdfocr.divideNormalize). Les ombres disparaissent, l'encre garde son
+     contraste relatif. Déterministe — même résultat intake et export. */
+  function normalizeCanvas(source) {
+    const { w, h } = bitmapDims(source);
+    const tw = Math.max(3, Math.round(w / 24)), th = Math.max(3, Math.round(h / 24));
+    const cvT = document.createElement('canvas');
+    cvT.width = tw; cvT.height = th;
+    cvT.getContext('2d').drawImage(source, 0, 0, tw, th);
+    const cvB = document.createElement('canvas');
+    cvB.width = w; cvB.height = h;
+    const ctxB = cvB.getContext('2d', { willReadFrequently: true });
+    ctxB.drawImage(cvT, 0, 0, w, h);
+    const bd = ctxB.getImageData(0, 0, w, h).data;
+
+    const cvS = document.createElement('canvas');
+    cvS.width = w; cvS.height = h;
+    const ctxS = cvS.getContext('2d', { willReadFrequently: true });
+    ctxS.drawImage(source, 0, 0);
+    const sd = ctxS.getImageData(0, 0, w, h);
+    window.PdfOcr.divideNormalize(sd.data, bd);
+    ctxS.putImageData(sd, 0, 0);
+    return cvS;
   }
 
   function blobToDataURL(blob) {
@@ -877,42 +959,55 @@
     });
   }
 
-  /* Lecture d'une image pour l'API : si l'option est active et qu'un angle net
-     est détecté, l'image est redressée AVANT l'envoi. Elle devient la
-     référence de toute la suite — bbox OCR (calque texte), détourage et
-     export PDF tombent tous dans le repère de l'image redressée. */
+  /* Lecture d'une image pour l'API : redresse l'inclinaison et/ou uniformise
+     l'éclairage détectés (options actives), AVANT l'envoi. L'image traitée
+     devient la référence de toute la suite — bbox OCR (calque texte),
+     détourage et export PDF tombent tous dans son repère. */
   async function prepareImage(item) {
     item.skew = 0;
-    if (!els.deskew || !els.deskew.checked) return readAsDataURL(item.file);
+    item.light = 0;
+    const wantSkew = !els.deskew || els.deskew.checked;
+    const wantLight = !els.lightEven || els.lightEven.checked;
+    if (!wantSkew && !wantLight) return readAsDataURL(item.file);
     let bmp = null;
     try {
-      await ensurePdfOcr(); // bestSkewAngle / rotationSize, sans pdf-lib
+      await ensurePdfOcr(); // bestSkewAngle / rotationSize / divideNormalize, sans pdf-lib
       bmp = await decodeBitmap(item.file);
-      const est = await estimateSkew(bmp);
-      if (!est) return readAsDataURL(item.file);
-      const { blob } = await rotateImage(bmp, est.angle);
-      item.skew = est.angle;
+      const an = analyzeImage(bmp);
+      const est = wantSkew ? estimateSkewFromAnalysis(an) : null;
+      const doRotate = !!est;
+      const spread = lightSpreadFromAnalysis(an);
+      const doLight = wantLight && window.PdfOcr.planLightNormalize(spread.p10, spread.p90, doRotate);
+      if (!doRotate && !doLight) return readAsDataURL(item.file);
+      let cv = null;
+      if (doRotate) cv = rotateToCanvas(bmp, est.angle);
+      if (doLight) { const src = cv || bmp; cv = normalizeCanvas(src); }
+      const blob = await canvasToJpeg(cv);
+      if (doRotate) item.skew = est.angle;
+      if (doLight) item.light = 1;
       return blobToDataURL(blob);
     } catch {
-      return readAsDataURL(item.file); // redressement impossible : image d'origine
+      return readAsDataURL(item.file); // prétraitement impossible : image d'origine
     } finally {
       if (bmp && bmp.close) { try { bmp.close(); } catch { /* déjà fermée */ } }
     }
   }
 
-  /* Prépare la page PDF d'un scan : image de référence (redressée si le scan
-     était penché — les blocs OCR sont déjà dans son repère), détourage éventuel. */
+  /* Prépare la page PDF d'un scan : image de référence (redressée/uniformisée
+     à l'analyse — les blocs OCR sont déjà dans son repère), détourage éventuel. */
   async function buildPdfPageSpec(item) {
     let bytes = null, mime = null, bmp = null;
     try {
-      if (item.skew) {
+      if (item.skew || item.light) {
         const raw = await decodeBitmap(item.file);
-        let blob = null;
+        let cv = null;
         try {
-          blob = (await rotateImage(raw, item.skew)).blob;
+          if (item.skew) cv = rotateToCanvas(raw, item.skew);
+          if (item.light) { const src = cv || raw; cv = normalizeCanvas(src); }
         } finally {
           if (raw && raw.close) { try { raw.close(); } catch { /* déjà fermée */ } }
         }
+        const blob = await canvasToJpeg(cv);
         bytes = new Uint8Array(await blob.arrayBuffer());
         mime = 'image/jpeg';
         bmp = await decodeBitmap(blob); // mêmes géométrie et coordonnées que l'image envoyée à l'API
@@ -1035,11 +1130,14 @@
         : 'Page la moins sûre du document (score de reconnaissance renvoyé par l\u2019API Mistral) : relis ce texte';
     }
 
-    const box = item.kind === 'image' && item.skew ? document.createElement('span') : null;
+    const box = item.kind === 'image' && (item.skew || item.light) ? document.createElement('span') : null;
     if (box) {
       box.className = 'rpages';
-      box.textContent = `redressé ${String(Math.abs(item.skew)).replace('.', ',')}°`;
-      box.title = `Scan incliné de ${String(Math.abs(item.skew)).replace('.', ',')}° — image redressée avant l'analyse (texte, tableaux et calque texte alignés).`;
+      const parts = [];
+      if (item.skew) parts.push(`redressé ${String(Math.abs(item.skew)).replace('.', ',')}°`);
+      if (item.light) parts.push('ombres atténuées');
+      box.textContent = parts.join(' · ');
+      box.title = `Prétraitement appliqué avant l'analyse : ${parts.join(', ')} — caractères, tableaux et calque texte alignés sur l'image corrigée.`;
     }
 
     const seg = document.createElement('span');
