@@ -204,3 +204,58 @@ code.mono, .mono code { font-size: 0.85em; }
   border-color: rgba(242, 239, 231, 0.25); border-top-color: var(--ink);
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* --- Dialogue « annotations manuscrites » (documents annotés) ---
+   Ouvert au premier repérage de stylo, ou depuis la ligne de préférences
+   sous le mode d'analyse. Le choix peut y être mémorisé (stockage cascade). */
+.dlg-wrap {
+  position: fixed; inset: 0; z-index: 90;
+  display: grid; place-items: center; padding: 1.2rem;
+  background: rgba(6, 5, 4, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: dlg-fade 0.25s ease;
+}
+.dlg {
+  width: min(94vw, 600px); max-height: 88vh; overflow: auto;
+  padding: clamp(1.2rem, 3vw, 1.6rem);
+  border-radius: var(--r-md);
+  animation: dlg-in 0.35s var(--ease);
+}
+.dlg h3 { margin: 0 0 0.45rem; font-size: 1.2rem; letter-spacing: -0.015em; }
+.dlg p { margin: 0 0 0.95rem; color: var(--ink-dim); font-size: 0.9rem; line-height: 1.5; }
+.dlg-opts { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 0.95rem; }
+.dlg-opt {
+  display: flex; align-items: flex-start; gap: 0.65rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--stroke-soft); border-radius: var(--r-sm);
+  background: rgba(0, 0, 0, 0.25); cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.dlg-opt:hover { border-color: rgba(255, 83, 16, 0.45); }
+.dlg-opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.dlg-opt input { margin-top: 0.22rem; accent-color: var(--accent); flex: none; }
+.dlg-opt b { display: block; font-size: 0.88rem; margin-bottom: 0.15rem; }
+.dlg-opt span { display: block; color: var(--ink-dim); font-size: 0.78rem; line-height: 1.45; }
+.dlg-remember {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.84rem; color: var(--ink-dim); margin: 0 0 1rem; cursor: pointer;
+}
+.dlg-remember input { accent-color: var(--accent); flex: none; }
+.dlg-actions { display: flex; justify-content: flex-end; gap: 0.6rem; flex-wrap: wrap; }
+@keyframes dlg-fade { from { opacity: 0; } }
+@keyframes dlg-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+/* badge du traitement appliqué au manuscrit, sur la carte résultat */
+.rscore.annot { color: var(--accent); background: rgba(255, 83, 16, 0.12); }
+
+/* ligne de préférences sous le mode d'analyse */
+#annot-row { margin: 0.4rem 0 0; display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
+#annot-row button { padding-inline: 0.6rem; text-transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dlg-wrap, .dlg { animation: none; }
+}

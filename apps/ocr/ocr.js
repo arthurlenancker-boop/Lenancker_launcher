@@ -11,6 +11,8 @@
   const LS_TRIM = 'lenancker.ocr.trimPage';
   const LS_HF = 'lenancker.ocr.cleanHf';
   const LS_MODE = 'lenancker.ocr.mode';
+  const LS_ANNOTS_MODE = 'lenancker.ocr.annots.mode';       // 'separate' | 'printed' | 'mixed'
+  const LS_ANNOTS_REMEMBER = 'lenancker.ocr.annots.remember'; // '1' = choix mémorisé, plus de question
   const MAX_FILE_BYTES = 50 * 1024 * 1024; // limite API Mistral : 50 Mo
   const WARN_FILE_BYTES = 20 * 1024 * 1024;
 
@@ -47,6 +49,7 @@
     results: $('results'), empty: $('empty-results'), copyAll: $('copy-all'),
     includeImages: $('include-images'), trimPage: $('trim-page'), cleanHf: $('clean-hf'),
     modeOcr: $('mode-ocr'), modeIa: $('mode-ia'), modeHint: $('mode-hint'), pdfAll: $('pdf-all'),
+    annotRow: $('annot-row'), annotPrefs: $('annot-prefs'),
   };
   // Préférences persistées via la cascade de stockage (voir common.js) :
   // indisponible dans certains contextes, sans casser l'app.
@@ -82,9 +85,10 @@
     els.modeIa.setAttribute('aria-pressed', String(ia));
     if (els.modeHint) {
       els.modeHint.textContent = ia
-        ? 'Après l\u2019OCR, un modèle Mistral à vision relit le document original (l\u2019image, ou les pages du PDF une à une) et recrée lui-même le document en Markdown — prompt strict : interdiction d\u2019inventer, de deviner ou de modifier, mot illisible rendu [illisible]. L\u2019OCR brut reste en onglet pour vérifier.'
+        ? 'Après l\u2019OCR, un modèle Mistral à vision relit le document original (l\u2019image, ou les pages du PDF une à une) et recrée lui-même le document en Markdown — prompt strict : interdiction d\u2019inventer, de deviner ou de modifier, mot illisible rendu [illisible]. Le stylo est repéré avant la retranscription : ton traitement des annotations manuscrites est demandé une fois, puis mémorisé.'
         : 'Fidèle au document : le texte sort tel que reconnu, rien n\u2019est modifié.';
     }
+    if (els.annotRow) els.annotRow.classList.toggle('hidden', !ia);
   }
   if (els.modeOcr && els.modeIa) {
     els.modeOcr.addEventListener('click', () => { store.set(LS_MODE, 'ocr'); applyModeUI(); });
@@ -92,6 +96,52 @@
   }
   applyModeUI();
   document.getElementById('brand-logo').innerHTML = window.iconSvg('scan');
+
+  /* ---------- Annotations manuscrites (documents annotés) ----------
+     Un scan de cours annoté au stylo contient deux textes : l'imprimé du
+     manuel et les notes de la main. En mode IA, un repérage à bas prix
+     (les premières images au modèle vision, réponse JSON minimale) les
+     distingue AVANT la retranscription ; si l'écriture manuscrite y est,
+     le traitement voulu est demandé une fois (dialogue), puis mémorisé
+     via la cascade de stockage — les documents suivants l'appliquent en
+     silence, sans plus jamais interrompre. Modifiable à tout moment depuis
+     la ligne de préférences sous le mode d'analyse. */
+  const ANNOT_MODES = {
+    separate: 'séparer (texte imprimé, puis section Annotations)',
+    printed: 'ignorer (texte imprimé seul)',
+    mixed: 'tout transcrire, à sa place',
+  };
+  const ANNOT_BADGES = {
+    separate: 'manuscrit séparé',
+    printed: 'manuscrit ignoré',
+    mixed: 'manuscrit inclus',
+  };
+  function getAnnotPref() {
+    const m = store.get(LS_ANNOTS_MODE);
+    return {
+      mode: (m === 'printed' || m === 'mixed') ? m : 'separate',
+      remember: store.get(LS_ANNOTS_REMEMBER) === '1',
+      stored: !!m,
+    };
+  }
+  function refreshAnnotRow() {
+    if (!els.annotPrefs) return;
+    const pref = getAnnotPref();
+    els.annotPrefs.textContent = `${ANNOT_MODES[pref.mode]}${pref.remember ? ' · mémorisé' : ''} — modifier`;
+    els.annotPrefs.title = 'Traitement appliqué quand une retranscription IA repère de l\u2019écriture manuscrite dans un document (choix mémorisable au moment du repérage).';
+  }
+  if (els.annotPrefs) {
+    refreshAnnotRow();
+    els.annotPrefs.addEventListener('click', async () => {
+      const res = await openAnnotDialog({ manual: true });
+      if (res) {
+        store.set(LS_ANNOTS_MODE, res.mode);
+        store.set(LS_ANNOTS_REMEMBER, res.remember ? '1' : '0');
+        refreshAnnotRow();
+        window.toast(`Annotations manuscrites : ${ANNOT_MODES[res.mode]}, ${res.remember ? 'mémorisé — plus de question' : 'redemandé à chaque repérage'}.`, 'ok');
+      }
+    });
+  }
 
   marked.setOptions({ gfm: true, breaks: true });
 
@@ -353,7 +403,7 @@
       if (file.size > WARN_FILE_BYTES) {
         window.toast(`${file.name} est volumineux (${fmtSize(file.size)}) : l’OCR peut prendre du temps.`, 'warn', 5200);
       }
-      queue.push({ id: ++seq, file, kind, status: 'pending', dataUrl: null, markdown: null, pages: 0, images: {}, imageDims: {}, confScore: null, skew: 0, iaMd: null, error: null });
+      queue.push({ id: ++seq, file, kind, status: 'pending', dataUrl: null, markdown: null, pages: 0, images: {}, imageDims: {}, confScore: null, skew: 0, iaMd: null, annotMode: null, error: null });
       added++;
     }
     if (added) renderQueue();
@@ -684,6 +734,62 @@
     "Figures, schémas, photos, captures : remplacés par ![figure](figure-N) numérotés dans l'ordre d'apparition — jamais décrits ni interprétés ; leur légende écrite est recopiée.",
     "Réponse : uniquement le Markdown du document — aucune introduction, aucune conclusion, aucune balise autour.",
   ].join('\n');
+
+  /* Variantes « documents annotés » : elles ne créent rien, elles ne font que
+     donner une destination à l'encre manuscrite — la copie reste la règle
+     commune (rien d'inventé, [illisible] plutôt qu'une devinette). */
+  const ANNOT_PRINTED = [
+    'Document annoté : ce document mêle texte imprimé et écriture manuscrite (stylo, crayon : notes en marge, mots ajoutés, corrections, numéros, gribouillis).',
+    'Ta transcription ne reproduit QUE le texte imprimé d\u2019origine. Tout le manuscrit est ignoré, sans exception — n\u2019en transcris pas un mot. Les soulignements et surlignages à la main ne sont pas reproduits non plus. Une ligne imprimée barrée ou corrigée à la main reste recopiée telle qu\u2019elle a été imprimée.',
+  ].join('\n');
+  const ANNOT_SEPARATE = [
+    'Document annoté : ce document mêle texte imprimé et écriture manuscrite à la main. Réponse en DEUX parties, dans cet ordre :',
+    '1. Un titre « ## Texte imprimé » puis la transcription fidèle du seul imprimé, selon toutes les règles ci-dessus — le manuscrit n\u2019y figure jamais.',
+    '2. Puis une ligne « --- » puis un titre « ## Annotations manuscrites » : chaque élément manuscrit recopié fidèlement entre « », groupé par emplacement en sous-titres (**Haut de page**, **Marge**, **Bas de page**, **Entre les lignes** — seulement les emplacements qui contiennent quelque chose).',
+    'Pour chaque annotation, indique entre parenthèses la zone du texte imprimé qu\u2019elle concerne : « (l. 4-9) » en utilisant la numérotation imprimée quand le document en comporte une, sinon une estimation sobre depuis le haut du passage concerné (ex. « (l. 1-2) ») ; sans numéro identifiable, pas de parenthèse. Le manuscrit souligné ou surligné : une ligne « Souligné : « … » » avec le passage imprimé recopié. Une correction manuscrite : « Corrigé : « mot imprimé » → « mot manuscrit » ».',
+    'Copie uniquement — aucune interprétation, aucune reformulation de ce que dit le manuscrit. Un mot manuscrit illisible devient [illisible], jamais deviné.',
+  ].join('\n');
+  const ANNOT_MIXED = [
+    'Document annoté : transcris TOUT ce qui est écrit sur la page — imprimé et manuscrit — dans l\u2019ordre de lecture exact, sans rien omettre.',
+    'Chaque passage manuscrit est rendu entre « » immédiatement suivi de la mention [manuscrit] ; l\u2019illisible manuscrit devient [illisible]. Le reste suit toutes les règles ci-dessus.',
+  ].join('\n');
+
+  function visionSystemFor(annot) {
+    let sys = VISION_SYSTEM;
+    if (annot === 'printed') sys += '\n\n' + ANNOT_PRINTED;
+    else if (annot === 'separate') sys += '\n\n' + ANNOT_SEPARATE;
+    else if (annot === 'mixed') sys += '\n\n' + ANNOT_MIXED;
+    return sys;
+  }
+
+  /* Repérage du manuscrit : petit aller-retour vision sur les premières
+     images, réponse attendue en JSON compact. Le doute (stylo présent ou
+     non, où, quoi) se lève avant la retranscription — jamais au milieu. */
+  const DETECT_SYSTEM = [
+    'Tu prépares une retranscription documentaire. On te montre une ou plusieurs images d\u2019un même document.',
+    'Réponds UNIQUEMENT par un objet JSON compact sur une seule ligne — aucun texte autour, aucune balise de code :',
+    '{"handwriting": true, "printed": true, "summary": "…"}',
+    'handwriting : true si de l\u2019écriture manuscrite (stylo, crayon, marqueur) est présente, même partielle — notes en marge, mots ajoutés entre les lignes, corrections, titres ou numéros écrits à la main ; false sinon.',
+    'printed : true si du texte imprimé est présent (police d\u2019imprimerie régulière, livre, polycopié).',
+    'summary : une phrase brève en français disant où est le manuscrit et de quoi il s\u2019agit (ex. « notes au stylo en marge gauche et en bas de page, passages soulignés ») ; chaîne vide si aucun manuscrit.',
+  ].join('\n');
+
+  function parseDetect(out) {
+    try {
+      const m = String(out).match(/\{[\s\S]*\}/); // tolère les balises de code autour du JSON
+      if (!m) return null;
+      const j = JSON.parse(m[0]);
+      if (typeof j !== 'object' || j === null) return null;
+      const summary = typeof j.summary === 'string' ? j.summary.trim().replace(/\s+/g, ' ').slice(0, 180) : '';
+      return {
+        handwriting: j.handwriting === true,
+        printed: j.printed !== false,
+        summary: summary || 'écriture manuscrite repérée sur le document',
+      };
+    } catch {
+      return null;
+    }
+  }
   const VISION_MODEL_PREFS = ['pixtral-12b-2409', 'mistral-small-latest', 'pixtral-large-latest', 'mistral-medium-latest', 'ministral-14b-latest'];
   const VISION_MAX_PAGES = 15;    // garde-fou volume/temps ; au-delà, toast avertit
   const VISION_CHUNK = 8;         // limite usuelle des modèles vision (images par requête)
@@ -747,20 +853,49 @@
   let visionOrderCache = null;
   let visionModelCache = null;
 
-  /* Garde anti-hallucination : la retranscription doit rester dans le volume
-     de l'OCR — un écart flagrant trahit un résumé ou une dérive ; l'OCR brut
-     reste toujours la référence affichée. */
-  function retranscribeLooksSane(out, raw) {
-    return out.length >= raw.length * 0.5 && out.length <= raw.length * 2.5;
+  async function ensureVisionOrder(key) {
+    if (visionOrderCache) return visionOrderCache;
+    const res = await fetch(MODELS_URL, { headers: { Authorization: `Bearer ${key}` } });
+    if (!res.ok) throw Object.assign(new Error(`liste des modèles inaccessible (HTTP ${res.status})`), { status: res.status });
+    const data = await res.json().catch(() => null);
+    const ids = ((data && data.data) || []).map((m) => m.id);
+    const ordered = VISION_MODEL_PREFS.filter((id) => ids.includes(id));
+    const order = ordered.length ? ordered : [pickVisionModel(ids)].filter(Boolean);
+    if (!order.length) throw new Error('aucun modèle de vision accessible pour cette clé');
+    visionOrderCache = order;
+    return order;
   }
 
-  async function askVision(model, images, key, attempt) {
+  /* Ordre d'essai effectif : le modèle qui a déjà réussi passe en tête. */
+  function visionModelOrder() {
+    return visionModelCache
+      ? [visionModelCache, ...visionOrderCache.filter((m) => m !== visionModelCache)]
+      : visionOrderCache;
+  }
+
+  /* Garde anti-hallucination : la retranscription doit rester dans le volume
+     de l'OCR — un écart flagrant trahit un résumé ou une dérive ; l'OCR brut
+     reste toujours la référence affichée. Bornes élargies pour les documents
+     annotés : une section Annotations s'ajoute (séparé), ou au contraire
+     l'OCR brut bafouillait du manuscrit que la retranscription retire
+     (imprimé seul). */
+  function retranscribeLooksSane(out, raw, annot) {
+    const lo = annot === 'printed' ? 0.3 : annot === 'separate' ? 0.4 : 0.5;
+    const hi = annot === 'separate' ? 3.0 : 2.5;
+    return out.length >= raw.length * lo && out.length <= raw.length * hi;
+  }
+
+  async function askVision(model, images, key, attempt, opts) {
     const a = attempt || 1;
+    const o = opts || {};
+    const system = o.system || VISION_SYSTEM;
+    const userText = o.userText
+      || (images.length === 1
+        ? 'Transcris fidèlement ce document.'
+        : 'Transcris fidèlement ces pages du même document, dans l\u2019ordre, en une transcription continue.');
     const parts = [{
       type: 'text',
-      text: images.length === 1
-        ? 'Transcris fidèlement ce document.'
-        : 'Transcris fidèlement ces pages du même document, dans l\u2019ordre, en une transcription continue.',
+      text: userText,
     }];
     for (const u of images) parts.push({ type: 'image_url', image_url: u });
     const res = await fetch(CHAT_URL, {
@@ -769,7 +904,7 @@
       body: JSON.stringify({
         model,
         messages: [
-          { role: 'system', content: VISION_SYSTEM },
+          { role: 'system', content: system },
           { role: 'user', content: parts },
         ],
         temperature: 0,
@@ -783,7 +918,7 @@
       } catch { /* garde le statut HTTP */ }
       if ((res.status >= 500 || res.status === 429) && a < 2) {
         await new Promise((r) => setTimeout(r, 1500 * a));
-        return askVision(model, images, key, a + 1);
+        return askVision(model, images, key, a + 1, opts);
       }
       throw Object.assign(new Error(message), { status: res.status });
     }
@@ -793,25 +928,181 @@
     return out;
   }
 
+  /* ---------- Dialogue « éléments présents » (documents annotés) ----------
+     Ouvert automatiquement quand il y a doute (du manuscrit est repéré et
+     aucun choix n'est mémorisé), ou à tout moment depuis la ligne de
+     préférences. Rend { mode, remember }, ou null si fermé sans choisir.
+     « Mémoriser » persiste le choix dans la cascade de stockage : les
+     documents suivants n'interrogent plus jamais. Deux dialogues ne
+     s'affichent jamais en même temps (l'OCR analyse des fichiers en
+     parallèle) : chacun attend le tour du précédent. */
+  let annotDialogChain = Promise.resolve();
+  function openAnnotDialog(cfg) {
+    const run = annotDialogChain.then(() => new Promise((resolve) => {
+      openAnnotDialogNow(cfg || {}, resolve);
+    }));
+    annotDialogChain = run.then(() => undefined, () => undefined); // la chaîne survit à tout
+    return run;
+  }
+
+  function openAnnotDialogNow(cfg, resolve) {
+    const pref = getAnnotPref();
+    const wrap = document.createElement('div');
+    wrap.className = 'dlg-wrap';
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-modal', 'true');
+    wrap.setAttribute('aria-labelledby', 'annot-dlg-title');
+
+    const dlg = document.createElement('div');
+    dlg.className = 'glass dlg';
+
+    const title = document.createElement('h3');
+    title.id = 'annot-dlg-title';
+    title.textContent = cfg.manual ? 'Annotations manuscrites — préférences' : 'Écriture manuscrite repérée';
+
+    const intro = document.createElement('p');
+    intro.textContent = cfg.manual
+      ? 'Quand une retranscription IA repère de l\u2019écriture manuscrite dans un document (notes au stylo, corrections, soulignements), elle peut être traitée de trois façons :'
+      : `« ${cfg.fileName || 'ce document'} » semble annoté à la main${cfg.summary ? ` : ${cfg.summary}` : ''}. Que faut-il en faire pendant la retranscription ?`;
+
+    const choices = [
+      { value: 'separate', label: 'Séparer', desc: 'Le texte imprimé d\u2019abord, puis une section « Annotations manuscrites » groupée par emplacement (haut de page, marge, bas de page) avec les lignes du texte concernées.' },
+      { value: 'printed', label: 'Texte imprimé seul', desc: 'Le manuscrit est ignoré en entier : aucune note, aucun mot ajouté, aucune correction transcrits — l\u2019OCR brut garde toujours trace de tout, en onglet.' },
+      { value: 'mixed', label: 'Tout transcrire', desc: 'Imprimé et manuscrit mélangés, à l\u2019ordre de lecture du document ; les passages manuscrits sont rendus entre « » suivis de la mention [manuscrit].' },
+    ];
+    const list = document.createElement('div');
+    list.className = 'dlg-opts';
+    const radios = [];
+    for (const c of choices) {
+      const lab = document.createElement('label');
+      lab.className = 'dlg-opt';
+      const input = document.createElement('input');
+      input.type = 'radio';
+      input.name = 'annot-mode';
+      input.value = c.value;
+      input.checked = (pref.stored ? pref.mode : 'separate') === c.value;
+      const box = document.createElement('div');
+      const b = document.createElement('b');
+      b.textContent = c.label;
+      const s = document.createElement('span');
+      s.textContent = c.desc;
+      box.append(b, s);
+      lab.append(input, box);
+      list.appendChild(lab);
+      radios.push(input);
+    }
+
+    const rememberLab = document.createElement('label');
+    rememberLab.className = 'dlg-remember';
+    const rcb = document.createElement('input');
+    rcb.type = 'checkbox';
+    rcb.checked = cfg.manual ? pref.remember : !!pref.stored && pref.remember;
+    const rtxt = document.createElement('span');
+    rtxt.textContent = 'Mémoriser ce choix — ne plus me demander pour les prochains documents';
+    rememberLab.append(rcb, rtxt);
+
+    const actions = document.createElement('div');
+    actions.className = 'dlg-actions';
+
+    const close = (result) => {
+      wrap.remove();
+      document.removeEventListener('keydown', onKey, true);
+      resolve(result);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(null); }
+    };
+
+    const btnCancel = document.createElement('button');
+    btnCancel.type = 'button';
+    btnCancel.className = 'btn btn-ghost';
+    btnCancel.textContent = 'Annuler';
+    btnCancel.addEventListener('click', () => close(null));
+
+    const btnOk = document.createElement('button');
+    btnOk.type = 'button';
+    btnOk.className = 'btn btn-primary';
+    btnOk.textContent = cfg.manual ? 'Enregistrer' : 'Analyser avec ce réglage';
+    btnOk.addEventListener('click', () => {
+      const sel = radios.find((r) => r.checked);
+      close(sel ? { mode: sel.value, remember: rcb.checked } : null);
+    });
+
+    actions.append(btnCancel, btnOk);
+    dlg.append(title, intro, list, rememberLab, actions);
+    wrap.appendChild(dlg);
+    document.body.appendChild(wrap);
+
+    document.addEventListener('keydown', onKey, true);
+    wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) close(null); }); // clic sur le fond : sortie prudente
+    (radios.find((r) => r.checked) || radios[0]).focus();
+  }
+
+  /* Repérage du stylo : la première tranche d'images suffit la plupart du
+     temps (la photo annotée est une seule page). Tout échec (réseau, quota,
+     JSON illisible, modèle sans vision) dégrade silencieusement vers la
+     retranscription classique — jamais une file bloquée sur une question. */
+  async function detectHandwriting(images, key) {
+    if (!images.length) return null;
+    try {
+      await ensureVisionOrder(key);
+      const order = visionModelOrder();
+      for (const model of order.slice(0, 2)) {
+        try {
+          const out = await askVision(model, images, key, 1, {
+            system: DETECT_SYSTEM,
+            userText: 'Analyse ce document et réponds par le seul JSON demandé.',
+          });
+          const det = parseDetect(out);
+          if (det) return det;
+        } catch (e) {
+          // 400/404/415/422 : modèle absent de la clé ou images refusées → essayer le suivant
+          if (e && (e.status === 400 || e.status === 404 || e.status === 415 || e.status === 422)) continue;
+          return null;
+        }
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
+
+  /* Décision pour ce document : choix mémorisé appliqué en silence, sinon
+     repérage puis éventuel dialogue (ce dernier choix y est mémorisable).
+     Rend 'separate' | 'printed' | 'mixed', null si aucun manuscrit repéré,
+     ou 'canceled' si le dialogue a été fermé sans choix. */
+  async function resolveAnnotMode(item, images, key) {
+    const pref = getAnnotPref();
+    if (pref.stored && pref.remember) return pref.mode;
+    try {
+      setProgressLabel(`Repérage des annotations : ${item.file.name}`);
+      const det = await detectHandwriting(images.slice(0, VISION_CHUNK), key);
+      if (!det || !det.handwriting) return null;
+      const choice = await openAnnotDialog({ fileName: item.file.name, summary: det.summary });
+      if (!choice) return 'canceled';
+      store.set(LS_ANNOTS_MODE, choice.mode);
+      store.set(LS_ANNOTS_REMEMBER, choice.remember ? '1' : '0');
+      refreshAnnotRow();
+      return choice.mode;
+    } catch {
+      return null; // repérage impossible : retranscription classique, fidèle à tout
+    }
+  }
+
   async function iaRetranscribe(item, key) {
     const raw = item.markdown || '';
     if (!raw) throw new Error('aucun texte OCR de référence');
     const images = await documentVisionImages(item);
     if (!images.length) throw new Error('aucune page à relire');
+    await ensureVisionOrder(key);
+    const order = visionModelOrder();
 
-    if (!visionOrderCache) {
-      const res = await fetch(MODELS_URL, { headers: { Authorization: `Bearer ${key}` } });
-      if (!res.ok) throw Object.assign(new Error(`liste des modèles inaccessible (HTTP ${res.status})`), { status: res.status });
-      const data = await res.json().catch(() => null);
-      const ids = ((data && data.data) || []).map((m) => m.id);
-      const ordered = VISION_MODEL_PREFS.filter((id) => ids.includes(id));
-      const order = ordered.length ? ordered : [pickVisionModel(ids)].filter(Boolean);
-      if (!order.length) throw new Error('aucun modèle de vision accessible pour cette clé');
-      visionOrderCache = order;
-    }
-    const order = visionModelCache
-      ? [visionModelCache, ...visionOrderCache.filter((m) => m !== visionModelCache)]
-      : visionOrderCache;
+    /* Documents annotés : le traitement du manuscrit est réglé avant de
+       retranscrire (mémorisé, ou demandé au premier repérage). */
+    const annot = await resolveAnnotMode(item, images, key);
+    if (annot === 'canceled') return null; // dialogue fermé : l'OCR brut reste, sans erreur
+    item.annotMode = (annot === 'separate' || annot === 'printed' || annot === 'mixed') ? annot : null;
+    const system = visionSystemFor(item.annotMode);
 
     /* Les pages en tranches (limite usuelle de 8 images par requête). */
     const chunks = [];
@@ -822,7 +1113,7 @@
     for (const model of order.slice(0, 3)) { // au plus 3 modèles essayés (clés restreintes)
       try {
         out = '';
-        for (const chunk of chunks) out += (out ? '\n\n' : '') + await askVision(model, chunk, key);
+        for (const chunk of chunks) out += (out ? '\n\n' : '') + await askVision(model, chunk, key, 1, { system });
         visionModelCache = model;
         break;
       } catch (e) {
@@ -832,7 +1123,7 @@
       }
     }
     if (!out) throw lastErr || new Error('retranscription impossible');
-    if (!retranscribeLooksSane(out, raw)) {
+    if (!retranscribeLooksSane(out, raw, item.annotMode)) {
       throw new Error('la retranscription s\u2019écarte trop de l\u2019OCR (résumé ou dérive) — résultat écarté, l\u2019OCR brut reste la référence');
     }
     return out;
@@ -1275,7 +1566,9 @@
           if (getMode() === 'ia') {
             try {
               setProgressLabel(`Retranscription IA : ${item.file.name}`);
-              item.iaMd = await iaRetranscribe(item, key);
+              const ia = await iaRetranscribe(item, key);
+              if (ia) item.iaMd = ia;
+              else window.toast(`Retranscription IA annulée pour ${item.file.name} — l'OCR brut reste.`, 'info', 5000);
             } catch (e) {
               window.toast(`Retranscription IA manquée pour ${item.file.name} — l'OCR brut reste.` + (e && e.message ? ` (${e.message})` : ''), 'warn', 7000);
             }
@@ -1350,6 +1643,14 @@
       box.className = 'rpages';
       box.textContent = `redressé ${String(Math.abs(item.skew)).replace('.', ',')}°`;
       box.title = "Scan penché détecté et redressé avant l'analyse — caractères, tableaux et calque texte alignés sur l'image corrigée.";
+    }
+
+    // traitement appliqué au manuscrit repéré (retranscription IA)
+    const annotSpan = item.annotMode ? document.createElement('span') : null;
+    if (annotSpan) {
+      annotSpan.className = 'rscore annot';
+      annotSpan.textContent = ANNOT_BADGES[item.annotMode];
+      annotSpan.title = 'Traitement des annotations manuscrites appliqué pendant la retranscription (modifiable dans « Annotations manuscrites », en haut de page).';
     }
 
     const seg = document.createElement('span');
@@ -1430,6 +1731,7 @@
     head.append(name, pages);
     if (scoreSpan) head.append(scoreSpan);
     if (box) head.append(box);
+    if (annotSpan) head.append(annotSpan);
     head.append(seg, btnCopy, btnHtml, btnDl, btnDocx);
     if (item.kind === 'image') head.append(btnPdf);
 
