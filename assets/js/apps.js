@@ -31,4 +31,14 @@ window.LENANCKER_APPS = [
     status: 'disponible',
     href: 'apps/revision/index.html',
   },
+  {
+    slug: 'probabilites',
+    name: 'Arbre de probabilité',
+    desc: "Dessine pas à pas un arbre de probabilité pondéré (jusqu'à 4 niveaux) : nomme l'expérience, chaque événement et son contraire (barre ou accent au-dessus de la lettre), choisis pour chaque branche « feuille » ou « développer », puis saisis à la main probabilités et résultats des chemins — l'outil ne calcule jamais rien, il ne fait que dessiner. Feuille blanche style manuel de maths, présence (probabilités au milieu des branches, feuilles alignées à droite), case « Total des issues » en option, exports PNG (≈ 300 dpi) et SVG, et réutilisation comme modèle (structure gardée, valeurs vidées).",
+    icon: 'arbre',
+    tint: 'rgba(158, 193, 255, 0.12)',
+    accent: '#9ec1ff',
+    status: 'disponible',
+    href: 'apps/probabilites/index.html',
+  },
 ];

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Arbre de probabilité — Lenancker Launcher</title>
+  <meta name="description" content="Dessine pas à pas un arbre de probabilité pondéré (jusqu'à 4 niveaux) : événements et contraires (barre au-dessus ou accent), probabilités et résultats des chemins saisis à la main — aucun calcul, export PNG/SVG.">
+  <meta name="theme-color" content="#0f0e0b">
+  <link rel="icon" type="image/svg+xml" href="../../assets/icons/favicon.svg">
+  <link rel="apple-touch-icon" href="../../assets/icons/apple-touch-icon.png">
+  <link rel="manifest" href="../../manifest.webmanifest">
+  <link rel="stylesheet" href="../../assets/css/design.css">
+  <link rel="stylesheet" href="probabilites.css">
+</head>
+<body>
+  <div class="bg" aria-hidden="true">
+    <div class="bg-grid"></div>
+    <div class="bg-glow"></div>
+    <div class="bg-grain"></div>
+  </div>
+
+  <main class="shell">
+    <header class="topbar reveal" style="--d:.05s">
+      <a class="brand" href="../../index.html">
+        <span class="brand-logo" aria-hidden="true" id="brand-logo"></span>
+        <span class="brand-name">Arbre de probabilité<em>lenancker launcher</em></span>
+      </a>
+      <a class="btn btn-ghost btn-sm" href="../../index.html">← Launcher</a>
+    </header>
+
+    <section class="glass panel reveal" style="--d:.15s" id="workbench" aria-labelledby="h-arbre">
+      <div class="panel-head">
+        <h2 id="h-arbre">Construis l'arbre <em class="serif-em">pas à pas</em></h2>
+        <span class="row" style="gap:.55rem">
+          <button type="button" class="btn btn-primary btn-sm" id="btnTemplate" title="Garder la structure et les noms, effacer toutes les valeurs saisies">Réutiliser comme modèle</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="btnReset" title="Repartir d'un schéma vierge">Nouveau schéma</button>
+        </span>
+      </div>
+      <p class="muted small panel-lead">
+        L'outil ne calcule rien : probabilités, produits de chemins et total des issues sont saisis à la main,
+        format libre (« 0,3 », « 3/10 », « 30 % »). Le schéma se met à jour en direct.
+      </p>
+
+      <div class="bench">
+        <div id="panel" aria-label="Étapes de construction"></div>
+
+        <div id="stage">
+          <div id="toolbar">
+            <div class="tgroup">
+              <span class="tlabel">Orientation</span>
+              <div class="seg" role="group" aria-label="Orientation">
+                <button type="button" id="seg-h" class="segbtn on">Horizontale</button>
+                <button type="button" id="seg-v" class="segbtn">Verticale</button>
+              </div>
+            </div>
+            <div class="tgroup">
+              <span class="tlabel">Contraire noté</span>
+              <div class="seg" role="group" aria-label="Notation du contraire">
+                <button type="button" id="seg-bar" class="segbtn on" title="Trait au-dessus de la lettre">Barre au-dessus</button>
+                <button type="button" id="seg-hat" class="segbtn" title="Petit accent au-dessus de la lettre">Accent circonflexe</button>
+              </div>
+            </div>
+            <label class="chk" title="Affiche une case libre sous les résultats">
+              <input type="checkbox" id="chkTotal"> <span>Case « Total des issues »</span>
+            </label>
+            <div class="texport">
+              <button type="button" id="btnPNG" class="btn btn-sm" title="Image PNG haute définition (≈ 300 dpi)">Exporter PNG</button>
+              <button type="button" id="btnSVG" class="btn btn-sm" title="Fichier vectoriel SVG">Exporter SVG</button>
+              <button type="button" id="btnCopy" class="btn btn-sm" title="Copie l'image du schéma dans le presse-papiers">Copier l'image</button>
+            </div>
+          </div>
+
+          <div id="canvasWrap">
+            <div id="canvasInner">
+              <svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg>
+            </div>
+          </div>
+
+          <p class="hint">
+            Résultats des chemins et total se saisissent directement dans les cases de la feuille.
+            Tout est hors ligne : rien n'est envoyé, tes saisies restent dans ce navigateur.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer reveal" style="--d:.3s">
+      <span>Arbre de probabilité — dessin seul, zéro calcul ; feuille exportable en PNG (≈ 300 dpi) ou SVG.</span>
+      <a href="../../index.html">Retour au launcher</a>
+    </footer>
+  </main>
+
+  <script src="../../assets/js/common.js" defer></script>
+  <script src="core.js" defer></script>
+  <script src="probabilites.js" defer></script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 /* Service worker du Lenancker Launcher.
    Stratégie : cache-first pour les assets statiques (le launcher doit
    rester utilisable hors-ligne), réseau direct pour l'API Mistral. */
-const VERSION = 'lenancker-v20';
+const VERSION = 'lenancker-v21';
 const CORE = [
   './',
   'index.html',
@@ -64,6 +64,11 @@ const CORE = [
   'apps/revision/revision.css',
   'apps/revision/core.js',
   'apps/revision/revision.js',
+  'apps/probabilites/',
+  'apps/probabilites/index.html',
+  'apps/probabilites/probabilites.css',
+  'apps/probabilites/core.js',
+  'apps/probabilites/probabilites.js',
   'docs/recherche-focus-tda-tsa.md',
   'docs/recherche-revision-memoisation.md',
 ];

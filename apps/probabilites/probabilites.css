@@ -1,0 +1,158 @@
+/* Arbre de probabilité — styles de l'app.
+   Thème launcher (verre sombre) autour, feuille blanche pour le schéma :
+   style « manuel de maths » — traits noirs, serif, fond de dessin blanc. */
+
+/* --- En-tête du panneau de travail --- */
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+.panel-head h2 { margin: 0; font-size: 1.32rem; letter-spacing: -0.02em; font-weight: 800; }
+.panel-lead { margin: 0.2rem 0 0; }
+
+/* --- Plan de travail : assistant à gauche, schéma à droite --- */
+.bench {
+  display: grid;
+  grid-template-columns: 402px minmax(0, 1fr);
+  gap: clamp(0.8rem, 1.8vw, 1.15rem);
+  margin-top: 1.05rem;
+  align-items: start;
+}
+@media (max-width: 1020px) {
+  .bench { grid-template-columns: 1fr; }
+}
+
+#panel { min-width: 0; }
+#stage { min-width: 0; }
+.paneltitle {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-faint);
+  font-weight: 700;
+  margin: 0.1rem 0 0.65rem;
+}
+
+/* --- Cartes d'étapes de l'assistant --- */
+.card {
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--stroke-soft);
+  border-radius: var(--r-md);
+  padding: 0.85rem 0.95rem 0.95rem;
+  margin-bottom: 0.75rem;
+}
+.howto ol { margin: 0; padding-left: 1.15rem; font-size: 0.8rem; line-height: 1.55; color: var(--ink-dim); }
+.cardtitle {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.92rem;
+  font-weight: 700;
+  margin: 0 0 0.6rem;
+  letter-spacing: -0.01em;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.note { font-size: 0.75rem; color: var(--ink-faint); margin: 0.5rem 0 0; line-height: 1.5; }
+.sub { font-size: 0.72rem; color: var(--ink-faint); font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; margin: 0.85rem 0 0.4rem; }
+.fld { display: block; margin: 0 0 0.55rem; }
+.fld .lbl { display: block; font-size: 0.72rem; color: var(--ink-dim); font-weight: 600; margin-bottom: 0.25rem; }
+.fld .input { padding: 0.5rem 0.65rem; font-size: 0.86rem; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+
+.prow {
+  display: grid;
+  grid-template-columns: 1fr 112px;
+  gap: 0.55rem;
+  align-items: center;
+  margin: 0.4rem 0;
+  cursor: text;
+}
+.pl { font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 0.86rem; text-align: right; color: var(--ink); }
+.pl .ov, .nlab .ov { text-decoration: overline; }
+.pinput { padding: 0.45rem 0.5rem; font-size: 0.86rem; }
+
+.chooser { display: grid; grid-template-columns: 52px 1fr 1fr; gap: 0.5rem; align-items: center; margin: 0.4rem 0; }
+.nlab { font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 0.86rem; text-align: right; color: var(--ink); }
+.rd { display: flex; align-items: center; gap: 0.35rem; font-size: 0.78rem; color: var(--ink-dim); cursor: pointer; user-select: none; }
+.rd input { accent-color: var(--accent); }
+.radio-note { font-size: 0.75rem; color: var(--ink-faint); margin: 0.5rem 0 0; line-height: 1.5; }
+
+.addwrap { margin: 0.25rem 0 0.85rem; }
+.w-full { width: 100%; }
+.addwrap .note { text-align: center; margin-top: 0.45rem; }
+.right { text-align: right; margin-top: 0.65rem; }
+
+/* --- Barre d'outils au-dessus de la feuille --- */
+#toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  align-items: center;
+  padding: 0.55rem 0.7rem;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--stroke-soft);
+  border-radius: var(--r-md);
+  margin-bottom: 0.7rem;
+  font-size: 0.78rem;
+}
+.tgroup { display: flex; align-items: center; gap: 0.5rem; }
+.tlabel { color: var(--ink-faint); font-size: 0.67rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+.seg { display: inline-flex; border: 1px solid var(--stroke); border-radius: 999px; overflow: hidden; }
+.segbtn {
+  border: 0;
+  background: transparent;
+  padding: 0.32rem 0.7rem;
+  font-size: 0.74rem;
+  cursor: pointer;
+  color: var(--ink-dim);
+  font-family: inherit;
+  transition: color 0.2s, background 0.2s;
+}
+.segbtn + .segbtn { border-left: 1px solid var(--stroke-soft); }
+.segbtn.on { background: var(--accent); color: var(--on-accent); font-weight: 700; }
+.chk { display: flex; align-items: center; gap: 0.4rem; cursor: pointer; color: var(--ink-dim); font-size: 0.76rem; user-select: none; }
+.chk input { accent-color: var(--accent); }
+.texport { margin-left: auto; display: flex; gap: 0.45rem; flex-wrap: wrap; }
+
+/* --- La feuille : fond blanc, dessin noir --- */
+#canvasWrap {
+  background: #ffffff;
+  border: 1px solid var(--stroke);
+  border-radius: var(--r-md);
+  padding: 12px;
+  overflow: auto;
+  position: relative;
+  min-height: 240px;
+}
+#canvasInner { position: relative; margin: 0 auto; }
+#svg { display: block; font-family: Georgia, 'Times New Roman', serif; }
+.res-input {
+  position: absolute;
+  box-sizing: border-box;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 15px;
+  text-align: center;
+  border: 1.2px solid #000;
+  border-radius: 4px;
+  background: #fff;
+  padding: 0 2px;
+  color: #141210;
+}
+.res-input:focus { outline: 2px solid rgba(31, 78, 121, 0.35); }
+.hint { font-size: 0.75rem; color: var(--ink-faint); margin: 0.6rem 0 0; line-height: 1.55; }
