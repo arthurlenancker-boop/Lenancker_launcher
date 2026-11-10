@@ -740,13 +740,19 @@
      commune (rien d'inventé, [illisible] plutôt qu'une devinette). */
   const ANNOT_PRINTED = [
     'Document annoté : ce document mêle texte imprimé et écriture manuscrite (stylo, crayon : notes en marge, mots ajoutés, corrections, numéros, gribouillis).',
-    'Ta transcription ne reproduit QUE le texte imprimé d\u2019origine. Tout le manuscrit est ignoré, sans exception — n\u2019en transcris pas un mot. Les soulignements et surlignages à la main ne sont pas reproduits non plus. Une ligne imprimée barrée ou corrigée à la main reste recopiée telle qu\u2019elle a été imprimée.',
+    'Ta transcription ne reproduit QUE le texte imprimé d\u2019origine. Tout le manuscrit est ignoré, sans exception — n\u2019en transcris pas un mot, où qu\u2019il soit : au-dessus du titre, dans les marges, entre les lignes, tout en bas de page. Une phrase manuscrite peut ressembler à un en-tête ou un pied de page de l\u2019ouvrage — elle n\u2019en est pas un : ne la recopie pas. Les soulignements et surlignages à la main ne sont pas reproduits non plus. Une ligne imprimée barrée ou corrigée à la main reste recopiée telle qu\u2019elle a été imprimée.',
   ].join('\n');
   const ANNOT_SEPARATE = [
-    'Document annoté : ce document mêle texte imprimé et écriture manuscrite à la main. Réponse en DEUX parties, dans cet ordre :',
-    '1. Un titre « ## Texte imprimé » puis la transcription fidèle du seul imprimé, selon toutes les règles ci-dessus — le manuscrit n\u2019y figure jamais.',
-    '2. Puis une ligne « --- » puis un titre « ## Annotations manuscrites » : chaque élément manuscrit recopié fidèlement entre « », groupé par emplacement en sous-titres (**Haut de page**, **Marge**, **Bas de page**, **Entre les lignes** — seulement les emplacements qui contiennent quelque chose).',
-    'Pour chaque annotation, indique entre parenthèses la zone du texte imprimé qu\u2019elle concerne : « (l. 4-9) » en utilisant la numérotation imprimée quand le document en comporte une, sinon une estimation sobre depuis le haut du passage concerné (ex. « (l. 1-2) ») ; sans numéro identifiable, pas de parenthèse. Si des passages imprimés sont soulignés ou surlignés à la main, signale-les par une ligne « Souligné : « … » » avec le passage imprimé recopié — aucune ligne de ce type s\u2019il n\u2019y en a pas. Une correction manuscrite qui remplace un mot imprimé : « Corrigé : « mot imprimé » → « mot manuscrit » » ; rien à signaler s\u2019il n\u2019y a pas de correction.',
+    'Document annoté : ce document mêle texte imprimé et écriture manuscrite à la main. Réponse en DEUX parties, dans cet ordre, séparées par une seule ligne « --- » :',
+    'PARTIE 1 : le titre « ## Texte imprimé », puis la transcription fidèle du seul imprimé, selon toutes les règles ci-dessus. Le manuscrit n\u2019y figure JAMAIS, où qu\u2019il soit. Une note manuscrite ressemble parfois à un titre, un en-tête de document ou une liste numérotée — si elle est écrite à la main (graphisme irrégulier, encre différente), c\u2019est du manuscrit : partie 2.',
+    'PARTIE 2 : le titre « ## Annotations manuscrites », puis chaque annotation recopiée fidèlement entre « », groupée par emplacement en sous-titres gras — seulement les emplacements qui contiennent quelque chose, dans l\u2019ordre de haut en bas de la page :',
+    '**Haut de page** : au-dessus du premier élément imprimé (titre compris), AVANT tout texte imprimé.',
+    '**Marge** : dans les marges latérales, à gauche ou à droite des lignes de texte — jamais au-dessus ni au-dessous de l\u2019ensemble du texte.',
+    '**Entre les lignes** : dans le corps du texte (mots ajoutés, corrections).',
+    '**Bas de page** : en dessous de la dernière ligne de texte imprimé, en zone basse de la page, APRÈS tout le texte.',
+    'Un bloc d\u2019écriture continu — plusieurs lignes de la même main, voisines — forme UNE seule annotation : recopiée d\u2019un tenant, sur une seule ligne ; les retours à la ligne du manuscrit deviennent des espaces.',
+    'Pour une annotation en **Marge** ou **Entre les lignes**, précède-la de la référence des lignes imprimées qui lui font face : « (l. 4-9) » en utilisant la numérotation imprimée quand le document en comporte une (numéros 5, 10, 15…), sinon une estimation sobre en comptant les lignes du texte imprimé — la ligne 1 est la première ligne de texte après le titre. Pour **Haut de page** et **Bas de page**, pas de référence de ligne.',
+    'Un passage imprimé souligné ou surligné à la main : une ligne « Souligné : « … » » avec le passage recopié, dans l\u2019emplacement qui convient. Une correction manuscrite qui remplace un mot imprimé : « Corrigé : « mot imprimé » → « mot manuscrit » ». Ne signale l\u2019un ou l\u2019autre QUE s\u2019il en existe un VISIBLEMENT sur la page ; au moindre doute sur son existence, n\u2019écris rien du tout.',
     'Copie uniquement — aucune interprétation, aucune reformulation de ce que dit le manuscrit. Un mot manuscrit illisible devient [illisible], jamais deviné.',
   ].join('\n');
   const ANNOT_MIXED = [
@@ -768,10 +774,12 @@
   const DETECT_SYSTEM = [
     'Tu prépares une retranscription documentaire. On te montre une ou plusieurs images d\u2019un même document.',
     'Réponds UNIQUEMENT par un objet JSON compact sur une seule ligne — aucun texte autour, aucune balise de code :',
-    '{"handwriting": true, "printed": true, "summary": "…"}',
+    '{"handwriting": true, "printed": true, "summary": "…", "notes": [{"zone": "haut", "texte": "…"}], "souligne": false}',
     'handwriting : true si de l\u2019écriture manuscrite (stylo, crayon, marqueur) est présente, même partielle — notes en marge, mots ajoutés entre les lignes, corrections, titres ou numéros écrits à la main ; false sinon.',
     'printed : true si du texte imprimé est présent (police d\u2019imprimerie régulière, livre, polycopié).',
     'summary : une phrase brève en français disant où est le manuscrit et de quoi il s\u2019agit (ex. « notes au stylo en marge gauche et en bas de page, passages soulignés ») ; chaîne vide si aucun manuscrit.',
+    'notes : la liste des éléments manuscrits DISTINCTS de la page, chacun recopié au mieux comme une seule zone de texte continu — jamais interprété ni reformulé, mot illisible rendu [illisible] ; au plus 12 notes, chaque texte de 160 caractères au plus ; zone, sans ambiguïté : "haut" = au-dessus du PREMIER élément imprimé (titre compris) / haut de page, "marge" = dans les marges LATÉRALES, à gauche ou à droite des lignes de texte — jamais au-dessus ni au-dessous de l\u2019ensemble du texte, "interligne" = dans le corps du texte imprimé, "bas" = en dessous de la DERNIÈRE ligne de texte imprimé, en zone basse de la page. Liste vide [] si aucun manuscrit.',
+    'souligne : true si un passage imprimé est souligné ou surligné à la main.',
   ].join('\n');
 
   function parseDetect(out) {
@@ -781,16 +789,123 @@
       const j = JSON.parse(m[0]);
       if (typeof j !== 'object' || j === null) return null;
       const summary = typeof j.summary === 'string' ? j.summary.trim().replace(/\s+/g, ' ').slice(0, 180) : '';
+      const ZONES = { haut: 'Haut de page', marge: 'Marge', interligne: 'Entre les lignes', bas: 'Bas de page' };
+      const notes = [];
+      for (const n of (Array.isArray(j.notes) ? j.notes : []).slice(0, 12)) {
+        if (!n || typeof n !== 'object') continue;
+        const txt = (typeof n.texte === 'string' ? n.texte : (typeof n.text === 'string' ? n.text : '')).trim().replace(/\s+/g, ' ').slice(0, 160);
+        if (!txt) continue;
+        notes.push({ zone: ZONES[String(n.zone || '').trim().toLowerCase()] || ZONES.marge, texte: txt });
+      }
       return {
-        handwriting: j.handwriting === true,
+        handwriting: j.handwriting === true || notes.length > 0,
         printed: j.printed !== false,
-        summary: summary || 'écriture manuscrite repérée sur le document',
+        summary: summary || (notes.length ? 'écriture manuscrite repérée sur le document' : ''),
+        notes,
+        souligne: j.souligne === true,
       };
     } catch {
       return null;
     }
   }
+  /* —— Réconciliation « documents annotés » ——
+     Deux lectures de la MÊME image (le repérage, puis la retranscription) ne
+     dérivent jamais l'une de l'autre en sens : leurs différences sont de la
+     reconnaissance de caractères. Le repérage livre donc un inventaire
+     (zone + meilleure lecture) qui sert de filet :
+     – les lignes de « Texte imprimé » qui recoupent une note repérée en
+       sont retirées (fuite du stylo dans l'imprimé) ;
+     – chaque note repérée absente de la section Annotations y est ajoutée,
+     sous son emplacement, telle que le repérage l'a lue ;
+     – la section « Annotations manuscrites » est reconstruite si le modèle
+     l'a oubliée. Rien n'y entre qui n'ait été lu sur la page. */
+  const normWords = (s) => String(s || '')
+    .toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/)
+    .filter((w) => w.length >= 4); // mots courts : bruit de langue
+
+  /* part de mots (≥4 lettres) de `note` présents dans `txt` */
+  function containment(txt, note) {
+    const big = new Set(normWords(txt));
+    const small = normWords(note);
+    if (!small.length) return 1;
+    return small.filter((w) => big.has(w)).length / small.length;
+  }
+
+  const ANNOT_HEADING = '## Annotations manuscrites';
+
+  function reconcileAnnots(out, annot, notes) {
+    if (annot !== 'separate' && annot !== 'printed') return String(out || '');
+    const list = (Array.isArray(notes) ? notes : []).filter((n) => n && n.texte);
+    if (!list.length) return String(out || '');
+    const text = String(out || '');
+    const hx = text.indexOf(ANNOT_HEADING);
+
+    // 1. « Texte imprimé » : en retirer toute ligne courte qui recoupe une note repérée
+    const part1 = (hx >= 0 ? text.slice(0, hx) : text)
+      .split('\n').filter((line) => {
+        const t = line.trim();
+        if (t.length < 4 || t.length > 220) return true; // ligne longue = texte imprimé
+        return !list.some((n) => containment(t, n.texte) >= 0.72);
+      }).join('\n');
+
+    if (annot === 'printed') return part1.replace(/\n{3,}/g, '\n\n').trim();
+
+    // 2. « Séparer » : garantir la section Annotations et chaque note repérée ;
+    //    une note manquante est ajoutée sous son emplacement, telle que le
+    //    repérage l'a lue sur la page
+    let sec = hx >= 0 ? text.slice(hx)
+      : (part1.replace(/\n*$/, '') + '\n\n---\n\n' + ANNOT_HEADING + '\n');
+    for (const n of list) {
+      if (containment(sec, n.texte) >= 0.6) continue; // déjà transcrite, à un OCR près
+      const zhead = `**${n.zone}**`;
+      const entry = `« ${n.texte} »`;
+      const zi = sec.indexOf(zhead);
+      if (zi >= 0) sec = sec.slice(0, zi + zhead.length) + '\n' + entry + sec.slice(zi + zhead.length);
+      else sec = sec.replace(/\n*$/, '') + '\n\n' + zhead + '\n' + entry;
+    }
+
+    // 3. remise en place : une note transcrite sous un MAUVAIS emplacement
+    //    (le modèle la met en « Entre les lignes » alors qu'elle est en bas de
+    //    page, etc.) y est déplacée — entrées ligne à ligne, jamais les blocs
+    //    longs du modèle
+    const blocks = sec.split(/\n(?=\*\*)/);
+    for (const n of list) {
+      const zi = blocks.findIndex((b) => b.startsWith(`**${n.zone}**`));
+      const zb = zi >= 0 ? blocks[zi] : null;
+      if (zb && containment(zb, n.texte) >= 0.6) continue; // déjà au bon endroit
+      const moves = [];
+      for (let bi = 0; bi < blocks.length; bi++) {
+        if (bi === zi) continue;
+        blocks[bi] = blocks[bi].split('\n').filter((line) => {
+          const t = line.trim();
+          if (t.length < 4 || t.length > 220 || /^\*\*[^*]+\*\*$/.test(t)) return true; // titres et texte long : intouchables
+          if (containment(t, n.texte) >= 0.72) { moves.push(t); return false; }
+          return true;
+        }).join('\n');
+      }
+      if (moves.length) {
+        if (zi >= 0) {
+          const lines = blocks[zi].split('\n');
+          lines.splice(1, 0, ...moves); // juste sous le titre de l'emplacement
+          blocks[zi] = lines.join('\n');
+        } else {
+          blocks.push(`**${n.zone}**\n${moves.join('\n')}`);
+        }
+      }
+    }
+    sec = blocks.join('\n');
+    const res = hx >= 0 ? part1 + sec : sec;
+    return res.replace(/\n{3,}/g, '\n\n').trim();
+  }
+
   const VISION_MODEL_PREFS = ['pixtral-12b-2409', 'mistral-small-latest', 'pixtral-large-latest', 'mistral-medium-latest', 'ministral-14b-latest'];
+  /* Documents annotés : le manuscrit est le cas difficile. Essais réels : un
+     petit modèle laisse fuir les notes manuscrites du haut dans « Texte
+     imprimé » ou range la note du bas dans « Haut de page », quand les gros
+     modèles suivent la séparation — les gros passent donc en tête dès qu'un
+     document est traité en mode annoté. */
+  const VISION_ANNOT_PREFS = ['mistral-medium-latest', 'mistral-large-latest', 'pixtral-large-latest', 'mistral-small-latest', 'ministral-14b-latest'];
   const VISION_MAX_PAGES = 15;    // garde-fou volume/temps ; au-delà, toast avertit
   const VISION_CHUNK = 8;         // limite usuelle des modèles vision (images par requête)
   const VISION_LONG_EDGE = 1600;  // côté long d'une page rastérisée
@@ -850,27 +965,35 @@
     return list.find((id) => /pixtral|small|medium/i.test(id) && !/ocr|embed|moderation|code|nemo|ministral-8b/i.test(id)) || null;
   }
 
-  let visionOrderCache = null;
-  let visionModelCache = null;
+  let visionOrderCache = null;   // ordre des modèles vision de la liste standard
+  let visionAnnotOrderCache = null; // ordre dédié aux documents annotés
+  let visionModelCache = null;   // dernier modèle qui a réussi (passe en tête tant qu'il sert)
 
-  async function ensureVisionOrder(key) {
-    if (visionOrderCache) return visionOrderCache;
+  async function ensureVisionOrder(key, prefs) {
+    const list = prefs || VISION_MODEL_PREFS;
+    const forAnnots = list === VISION_ANNOT_PREFS;
+    if (forAnnots ? visionAnnotOrderCache : visionOrderCache) return forAnnots ? visionAnnotOrderCache : visionOrderCache;
     const res = await fetch(MODELS_URL, { headers: { Authorization: `Bearer ${key}` } });
     if (!res.ok) throw Object.assign(new Error(`liste des modèles inaccessible (HTTP ${res.status})`), { status: res.status });
     const data = await res.json().catch(() => null);
     const ids = ((data && data.data) || []).map((m) => m.id);
-    const ordered = VISION_MODEL_PREFS.filter((id) => ids.includes(id));
+    const ordered = list.filter((id) => ids.includes(id));
     const order = ordered.length ? ordered : [pickVisionModel(ids)].filter(Boolean);
     if (!order.length) throw new Error('aucun modèle de vision accessible pour cette clé');
-    visionOrderCache = order;
+    if (forAnnots) visionAnnotOrderCache = order;
+    else visionOrderCache = order;
     return order;
   }
 
-  /* Ordre d'essai effectif : le modèle qui a déjà réussi passe en tête. */
-  function visionModelOrder() {
-    return visionModelCache
-      ? [visionModelCache, ...visionOrderCache.filter((m) => m !== visionModelCache)]
-      : visionOrderCache;
+  /* Ordre d'essai effectif : le modèle qui a déjà réussi passe en tête,
+     sauf pour les documents annotés dont l'ordre dédié ne doit pas être
+     court-circuité par un petit modèle repéré en détection. */
+  function visionModelOrder(prefs) {
+    const order = (prefs === VISION_ANNOT_PREFS ? visionAnnotOrderCache : visionOrderCache) || [];
+    const pinApplies = visionModelCache && (!prefs || prefs.includes(visionModelCache));
+    return pinApplies
+      ? [visionModelCache, ...order.filter((m) => m !== visionModelCache)]
+      : order;
   }
 
   /* Garde anti-hallucination : la retranscription doit rester dans le volume
@@ -1045,8 +1168,12 @@
   async function detectHandwriting(images, key) {
     if (!images.length) return null;
     try {
-      await ensureVisionOrder(key);
-      const order = visionModelOrder();
+      /* Repérage sur l'ordre « annoté » (gros d'abord) : son inventaire du
+         manuscrit nourrit le résumé du dialogue ET le filet de réconciliation —
+         la lecture du stylo y doit être la meilleure (essais réels : sur la
+         même page, l'inventaire du petit modèle saute les notes du haut). */
+      await ensureVisionOrder(key, VISION_ANNOT_PREFS);
+      const order = visionModelOrder(VISION_ANNOT_PREFS);
       for (const model of order.slice(0, 2)) {
         try {
           const out = await askVision(model, images, key, 1, {
@@ -1067,17 +1194,19 @@
     return null;
   }
 
-  /* Décision pour ce document : choix mémorisé appliqué en silence, sinon
-     repérage puis éventuel dialogue (ce dernier choix y est mémorisable).
+  /* Décision pour ce document — le repérage court TOUJOURS (il fournit aussi
+     l'inventaire des notes qui sert de filet à la réconciliation), mais la
+     question n'est posée que si aucun choix n'est mémorisé.
      Rend 'separate' | 'printed' | 'mixed', null si aucun manuscrit repéré,
      ou 'canceled' si le dialogue a été fermé sans choix. */
   async function resolveAnnotMode(item, images, key) {
     const pref = getAnnotPref();
-    if (pref.stored && pref.remember) return pref.mode;
     try {
       setProgressLabel(`Repérage des annotations : ${item.file.name}`);
       const det = await detectHandwriting(images.slice(0, VISION_CHUNK), key);
+      item.detNotes = (det && Array.isArray(det.notes)) ? det.notes : [];
       if (!det || !det.handwriting) return null;
+      if (pref.stored && pref.remember) return pref.mode; // mémorisé : appliqué en silence
       const choice = await openAnnotDialog({ fileName: item.file.name, summary: det.summary });
       if (!choice) return 'canceled';
       store.set(LS_ANNOTS_MODE, choice.mode);
@@ -1085,6 +1214,7 @@
       refreshAnnotRow();
       return choice.mode;
     } catch {
+      item.detNotes = [];
       return null; // repérage impossible : retranscription classique, fidèle à tout
     }
   }
@@ -1094,15 +1224,28 @@
     if (!raw) throw new Error('aucun texte OCR de référence');
     const images = await documentVisionImages(item);
     if (!images.length) throw new Error('aucune page à relire');
-    await ensureVisionOrder(key);
-    const order = visionModelOrder();
 
     /* Documents annotés : le traitement du manuscrit est réglé avant de
-       retranscrire (mémorisé, ou demandé au premier repérage). */
+       retranscrire (mémorisé, ou demandé au premier repérage), et commande
+       l'ordre des modèles — les gros d'abord pour ces documents-là. */
     const annot = await resolveAnnotMode(item, images, key);
     if (annot === 'canceled') return null; // dialogue fermé : l'OCR brut reste, sans erreur
     item.annotMode = (annot === 'separate' || annot === 'printed' || annot === 'mixed') ? annot : null;
     const system = visionSystemFor(item.annotMode);
+    const annotPrefs = item.annotMode ? VISION_ANNOT_PREFS : null;
+
+    await ensureVisionOrder(key, annotPrefs);
+    const order = visionModelOrder(annotPrefs);
+
+    /* L'inventaire du repérage accompagne la demande : une note difficile à
+       lire n'est plus jamais omise — le modèle recopie, le repérage oriente. */
+    let userText = images.length === 1
+      ? 'Transcris fidèlement ce document.'
+      : 'Transcris fidèlement ces pages du même document, dans l\u2019ordre, en une transcription continue.';
+    if (item.annotMode && item.detNotes && item.detNotes.length) {
+      const inv = item.detNotes.slice(0, 12).map((n) => `« ${n.texte} » (${n.zone})`).join(' ; ');
+      userText += ` Éléments manuscrits repérés sur les premières images (lecture approximative du repérage) : s\u2019ils sont visibles, ne les omets pas — recopie ta propre lecture, sans rien inventer. Inventaire : ${inv}.`;
+    }
 
     /* Les pages en tranches (limite usuelle de 8 images par requête). */
     const chunks = [];
@@ -1113,7 +1256,7 @@
     for (const model of order.slice(0, 3)) { // au plus 3 modèles essayés (clés restreintes)
       try {
         out = '';
-        for (const chunk of chunks) out += (out ? '\n\n' : '') + await askVision(model, chunk, key, 1, { system });
+        for (const chunk of chunks) out += (out ? '\n\n' : '') + await askVision(model, chunk, key, 1, { system, userText });
         visionModelCache = model;
         break;
       } catch (e) {
@@ -1123,6 +1266,7 @@
       }
     }
     if (!out) throw lastErr || new Error('retranscription impossible');
+    out = reconcileAnnots(out, item.annotMode, item.detNotes); // filet : fuites retirées, notes manquantes ajoutées
     if (!retranscribeLooksSane(out, raw, item.annotMode)) {
       throw new Error('la retranscription s\u2019écarte trop de l\u2019OCR (résumé ou dérive) — résultat écarté, l\u2019OCR brut reste la référence');
     }
