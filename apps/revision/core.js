@@ -29,14 +29,17 @@
     return { ease: 2.5, interval: 0, lapses: 0, reps: 0, due: now, lastReview: 0 };
   }
 
-  function newCard(deckId, front, back, now, id) {
-    return Object.assign({
+  function newCard(deckId, front, back, now, id, method) {
+    const base = Object.assign({
       id: id || uid(now),
       deckId: String(deckId || ''),
       front: String(front || ''),
       back: String(back || ''),
       created: now,
     }, newCardState(now));
+    base.method = method === 'leitner' ? 'leitner' : 'sm2';
+    base.box = 1;
+    return base;
   }
 
   /* Note un rappel. kind : 'again' | 'hard' | 'good' | 'easy'.
@@ -102,6 +105,14 @@
     for (const c of cards || []) {
       if (!c) continue;
       total++;
+      if (c.method === 'leitner') {
+        const box = Math.min(5, Math.max(1, Number(c.box) || 1));
+        const isNew = !c.lastReview && box === 1;
+        if (!isNew && box !== 5 && (Number(c.due) || 0) <= now) due++;
+        if (isNew) fresh++;
+        if (box === 5) mature++;
+        continue;
+      }
       const isNew = c.reps === 0 && !c.interval;
       const relearnDue = !c.interval && c.reps > 0 && c.due <= now;
       if (relearnDue || (c.interval && c.due <= now)) due++;
@@ -155,6 +166,8 @@
       reps: Math.max(0, Math.floor(Number(c.reps) || 0)),
       due: Number(c.due) || base,
       lastReview: Number(c.lastReview) || 0,
+      method: c.method === 'leitner' ? 'leitner' : 'sm2',
+      box: Math.min(5, Math.max(1, Math.floor(Number(c.box) || 1))),
     };
   }
 
@@ -165,6 +178,7 @@
       id: String(d.id || uid()),
       name: String(d.name || 'Paquet'),
       desc: String(d.desc || ''),
+      method: d.method === 'leitner' ? 'leitner' : 'sm2',
       created: Number(d.created) || base,
     };
   }
@@ -210,8 +224,136 @@
     };
   }
 
+
+  /* ---------- Boîte de Leitner — seconde méthode de paquet, au choix ----------
+     Le même fonctionnement que l'app d'exemple, appliqué aux paquets de
+     l'utilisateur : réussie, la carte monte d'une boîte et ses révisions
+     s'espacent réellement (1 jour, 2 jours, 1 semaine, 2 semaines, puis
+     acquise) ; ratée (« À revoir »), elle retourne en boîte 1 et revient le
+     lendemain. Fonctions pures sur les mêmes objets carte que SM-2 — champs
+     utilisés : box (1..5), lastReview, due. Testable sous Node. */
+
+  const LEITNER_BOXES = [
+    null,
+    { gap: 1,  label: 'Tous les jours' },
+    { gap: 2,  label: 'Tous les 2 jours' },
+    { gap: 7,  label: 'Chaque semaine' },
+    { gap: 14, label: 'Toutes les 2 semaines' },
+    { gap: 0,  label: 'Acquise (mûre)' },
+  ];
+
+  /* Note une carte Leitner. ok=true : monte d'une boîte (max 5) ;
+     ok=false : retour boîte 1. Retourne une NOUVELLE carte, l'originale
+     est inchangée (même pureté que grade()). */
+  function leitnerGrade(card, ok, now) {
+    const box = ok ? Math.min(5, Math.max(1, Number(card.box) || 1) + 1) : 1;
+    const gap = LEITNER_BOXES[box].gap;
+    return {
+      id: card.id,
+      deckId: card.deckId,
+      front: card.front,
+      back: card.back,
+      created: card.created,
+      method: 'leitner',
+      box,
+      lastReview: now,
+      due: box === 5 ? 0 : now + gap * DAY,
+    };
+  }
+
+  /* File de session Leitner : les cartes vues arrivées à échéance (la plus
+     en retard d'abord), puis les jamais vues dans la limite newLimit (ordre
+     de création, mélangées). box : filtre ciblé — révision volontaire d'une
+     boîte, toutes ses cartes vues reviennent, échéance ou pas. */
+  function leitnerQueue(cards, now, opts) {
+    const o = Object.assign({ newLimit: 20, box: null }, opts || {});
+    const pool = (cards || []).filter((c) => c && (o.box == null || (Number(c.box) || 1) === Number(o.box)));
+    const fresh = shuffle(pool.filter((c) => !c.lastReview)
+      .sort((a, b) => a.created - b.created)
+      .slice(0, Math.max(0, o.newLimit)));
+    let due = pool.filter((c) => c.lastReview && (Number(c.box) || 1) !== 5 && (c.due || 0) <= now);
+    if (o.box != null) due = pool.filter((c) => c.lastReview); // ciblé : hors échéance
+    due.sort((a, b) => (a.due || 0) - (b.due || 0) || (a.created - b.created));
+    return fresh.concat(due);
+  }
+
+  /* Répartition des boîtes d'un paquet, échéances du jour, part acquise. */
+  function leitnerStats(cards, now) {
+    const boxes = [0, 0, 0, 0, 0];
+    let due = 0;
+    let fresh = 0;
+    for (const c of cards || []) {
+      if (!c) continue;
+      const box = Math.min(5, Math.max(1, Number(c.box) || 1));
+      boxes[box - 1] += 1;
+      if (!c.lastReview) fresh += 1;
+      else if (box !== 5 && (Number(c.due) || 0) <= now) due += 1;
+    }
+    const acquired = boxes[4];
+    const total = boxes[0] + boxes[1] + boxes[2] + boxes[3] + boxes[4];
+    return {
+      total, boxes, due, fresh, acquired,
+      pct: total ? Math.round((acquired / total) * 100) : 0,
+    };
+  }
+
+  /* Ponts SM-2 <-> Leitner (changement de méthode d'un paquet) : l'intervalle
+     SM-2 devient une boîte au palier correspondant, et réciproquement — la
+     progression déjà gagnée n'est jamais perdue. */
+  function leitnerBoxForInterval(interval) {
+    const d = Number(interval) || 0;
+    if (!d) return 1;
+    if (d <= 2) return 2;
+    if (d <= 6) return 3;
+    if (d < 21) return 4;
+    return 5;
+  }
+  const LEITNER_INTERVALS = [0, 0, 2, 7, 14, 21];
+
+  function cardToLeitner(card, now) {
+    const box = leitnerBoxForInterval(card.interval);
+    const seen = (Number(card.reps) || 0) > 0 || (Number(card.lastReview) || 0) > 0;
+    return {
+      id: card.id, deckId: card.deckId, front: card.front, back: card.back,
+      created: card.created,
+      method: 'leitner',
+      box,
+      lastReview: seen ? (Number(card.lastReview) || now) : 0,
+      due: (!seen || box === 5) ? 0 : now + LEITNER_BOXES[box].gap * DAY,
+    };
+  }
+
+  function cardToSM2(card, now) {
+    const interval = LEITNER_INTERVALS[Math.min(5, Math.max(1, Number(card.box) || 1))];
+    const seen = (Number(card.lastReview) || 0) > 0;
+    return {
+      id: card.id, deckId: card.deckId, front: card.front, back: card.back,
+      created: card.created,
+      ease: 2.5,
+      interval: seen ? interval : 0,
+      lapses: 0,
+      reps: seen ? 1 : 0,
+      due: seen && interval ? now + interval * DAY : now,
+      lastReview: Number(card.lastReview) || 0,
+      method: 'sm2',
+      box: 1,
+    };
+  }
+
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+
   return {
     MIN, DAY, RETRY_MIN, MAX_INTERVAL,
+    LEITNER_BOXES, LEITNER_INTERVALS, leitnerBoxForInterval,
+    leitnerGrade, leitnerQueue, leitnerStats, cardToLeitner, cardToSM2,
+
     uid, newCard, newCardState, grade,
     buildQueue, statsFor,
     dayKey, computeStreak,

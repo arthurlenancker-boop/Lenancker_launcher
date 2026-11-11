@@ -24,7 +24,7 @@ window.LENANCKER_APPS = [
   {
     slug: 'revision',
     name: 'Révision',
-    desc: "Cartes mémos à répétition espacée : chaque carte est une question-réponse, SM-2 la replanifie juste avant l'oubli (Encore / Difficile / Moyen / Facile), le test actif fait le travail de mémorisation. Paquets recto/verso, séries de jours, export/import — fondé sur le brief répétition espacée & test actif.",
+    desc: "Cartes mémos à répétition espacée : chaque carte est une question-réponse, le test actif fait le travail de mémorisation. Chaque paquet choisit sa méthode : SM-2 (Encore / Difficile / Moyen / Facile, replanifié juste avant l'oubli) ou Boîte de Leitner (réussie la carte monte de boîte en boîte — jour, 2 jours, semaine, 2 semaines, puis acquise ; ratée elle retourne en boîte 1, confettis en boîte 5, progression du paquet en % acquis, révision ciblée par boîte, recherche par texte ou « boîte : N »). Méthode changeable à tout moment sans perdre la progression. Fondé sur le brief répétition espacée & test actif.",
     icon: 'brain',
     tint: 'rgba(123, 196, 127, 0.12)',
     accent: '#7bc47f',

@@ -36,14 +36,23 @@
       </div>
       <p class="muted small">
         Chaque carte est une question-réponse : tu t'y testes toi-même (le test actif retient
-        mieux que la relecture — Roediger &amp; Karpicke 2006), et SM-2 la replanifie
-        juste avant l'oubli. Tes paquets restent dans ce navigateur, exportables à tout moment.
+        mieux que la relecture — Roediger &amp; Karpicke 2006). Chaque paquet choisit sa méthode :
+        <b>SM-2</b> replanifie chaque carte juste avant l'oubli (Encore / Difficile / Moyen / Facile),
+        <b>Boîte de Leitner</b> la fait monter de boîte en boîte (jour, 2 jours, semaine, 2 semaines,
+        puis acquise). Tes paquets restent dans ce navigateur, exportables à tout moment.
       </p>
 
       <div class="row" style="gap:.6rem;margin-top:.9rem">
         <div class="field grow" style="min-width:180px">
           <label for="new-deck-name">Nouveau paquet</label>
           <input class="input" id="new-deck-name" type="text" placeholder="Ex. : SVT — génétique, Histoire — ch. 4…" autocomplete="off">
+        </div>
+        <div class="field" style="min-width:170px">
+          <label for="new-deck-method">Méthode</label>
+          <select class="input" id="new-deck-method">
+            <option value="sm2">SM-2 — répétition espacée</option>
+            <option value="leitner">Boîte de Leitner</option>
+          </select>
         </div>
         <button class="btn btn-primary" id="create-deck" type="button" style="align-self:flex-end">Créer</button>
       </div>
@@ -56,13 +65,35 @@
       <div class="panel-head">
         <h2 id="h-paquet"><em class="serif-em" id="deck-name">—</em></h2>
         <span class="row" style="gap:.6rem">
+          <span class="badge" id="deck-method-badge" hidden>—</span>
           <span class="badge" id="deck-stats" hidden>—</span>
         </span>
       </div>
       <div class="row" style="margin-block:.9rem">
         <button class="btn btn-primary" id="study" type="button">Réviser aujourd'hui</button>
         <button class="btn btn-ghost btn-sm" id="back-decks" type="button">← Mes paquets</button>
+        <button class="btn btn-ghost btn-sm" id="btn-method" type="button" title="Tu ne perds jamais la progression acquise : SM-2 ↔ Leitner se convertissent l'un en l'autre">Changer de méthode</button>
         <button class="btn btn-ghost btn-sm" id="delete-deck" type="button">Supprimer le paquet</button>
+      </div>
+
+      <!-- Bande Boîte de Leitner (paquets leitner uniquement) -->
+      <div class="glass subpanel hidden" id="deck-leitner">
+        <div class="row spread" style="align-items:baseline">
+          <span class="small muted">Progression du paquet — part des cartes acquises (boîte 5)</span>
+          <span class="mono leitner-pct" id="leitner-pct">0 %</span>
+        </div>
+        <div class="progress" aria-hidden="true"><div class="progress-bar" id="leitner-bar"></div></div>
+        <div class="row spread" style="margin-top:.35rem">
+          <span class="small muted" id="leitner-detail">—</span>
+          <span class="small muted" id="leitner-select-tip">Clique une boîte pour la réviser en ciblé — reclique pour retirer le filtre.</span>
+        </div>
+        <div class="leitner-boxes" id="leitner-boxes"></div>
+        <div class="row" style="margin-top:.8rem">
+          <div class="field grow" style="min-width:160px">
+            <label for="leitner-search">Chercher dans le paquet</label>
+            <input class="input" id="leitner-search" type="text" placeholder="Mot, recto ou verso… ou « boîte : 3 »" autocomplete="off">
+          </div>
+        </div>
       </div>
 
       <div class="glass subpanel">
@@ -114,6 +145,11 @@
         <button class="btn grade-hard" data-grade="hard" type="button" title="Raccourci : 2">Difficile<small><br>× 1,2</small></button>
         <button class="btn grade-good" data-grade="good" type="button" title="Raccourci : 3">Moyen<small><br>× facilité</small></button>
         <button class="btn grade-easy" data-grade="easy" type="button" title="Raccourci : 4">Facile<small><br>× facilité × 1,3</small></button>
+      </div>
+
+      <div class="row spread hidden" id="grade-leitner-actions">
+        <button class="btn vgrade-fail" id="grade-fail-leitner" type="button" title="Raccourci : 1">À revoir<small><br>retour Boîte 1</small></button>
+        <button class="btn vgrade-ok" id="grade-ok-leitner" type="button" title="Raccourci : 2">J'ai réussi<small><br>+1 boîte</small></button>
       </div>
 
       <div class="glass subpanel hidden" id="session-done">
