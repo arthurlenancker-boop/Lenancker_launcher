@@ -618,6 +618,60 @@
     return div.innerHTML;
   }
 
+  /* ---------- PDF du document recréé (mise en page, impression) ----------
+     La chaîne à l'envers se termine en papier numérique : le texte recréé et
+     ses figures soudées composés en pages A4 propres — titres, tableaux,
+     maths mises en forme — que la fenêtre d'impression du navigateur rend
+     en PDF (« Enregistrer au format PDF » du dialogue, ou impression papier.
+     Les figures sont des data-URL : aucune ressource réseau à attendre). */
+  function printDocHtml(inner) {
+    const katexCss = new URL('../../assets/vendor/katex/katex.min.css', location.href);
+    return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Document recréé — Lenancker Launcher</title>
+<link rel="stylesheet" href="${katexCss}">
+<style>
+  @page { size: A4; margin: 2cm 1.8cm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 11pt/1.55 "Segoe UI", system-ui, -apple-system, sans-serif; color: #111; background: #fff; }
+  h1, h2, h3, h4 { line-height: 1.25; margin: 1em 0 .35em; font-weight: 600; page-break-after: avoid; page-break-inside: avoid; }
+  h1 { font-size: 1.55em; } h2 { font-size: 1.3em; } h3 { font-size: 1.12em; } h4 { font-size: 1em; }
+  p { margin: .45em 0; orphans: 2; widows: 2; }
+  ul, ol { margin: .45em 0 .45em 1.4em; padding: 0; }
+  li { margin: .15em 0; }
+  table { border-collapse: collapse; width: 100%; margin: .7em 0; page-break-inside: avoid; }
+  th, td { border: .5pt solid #555; padding: .3em .5em; text-align: left; vertical-align: top; }
+  th { background: #f0f0f0; font-weight: 600; }
+  img { max-width: 100%; height: auto; margin: .5em auto; display: block; page-break-inside: avoid; }
+  blockquote { margin: .6em 0; padding: .1em .9em; border-left: 2.5pt solid #999; color: #333; }
+  pre { background: #f5f5f5; border: .5pt solid #ddd; padding: .5em; overflow: hidden; white-space: pre-wrap; page-break-inside: avoid; }
+  code { font-family: Consolas, monospace; font-size: .92em; }
+  pre code { background: none; }
+  hr { border: none; border-top: .5pt solid #bbb; margin: .9em 0; }
+  .katex { font-size: 1.05em; }
+</style>
+</head>
+<body>${inner}</body>
+</html>`;
+  }
+
+  async function printRecreated(item) {
+    const inner = await renderPreviewHtml(item.markdown, item.images);
+    const w = window.open('', '_blank', 'width=880,height=1100');
+    if (!w) {
+      window.toast('Fenêtre d\u2019impression bloquée — autorise les fenêtres surgissantes puis réessaie.', 'warn', 7000);
+      return;
+    }
+    w.document.open();
+    w.document.write(printDocHtml(inner));
+    w.document.close();
+    const fire = () => setTimeout(() => { try { w.focus(); w.print(); } catch { /* le dialogue reste accessible à la main */ } }, 200);
+    if (w.document.readyState === 'complete') fire();
+    else w.addEventListener('load', fire, { once: true });
+  }
+
   /* ---------- Appel API Mistral OCR ---------- */
   async function callOcr(item, key, attempt, plain) {
     const includeImages = store.get(LS_IMAGES) === '1';
@@ -1996,6 +2050,15 @@
     if (annotSpan) head.append(annotSpan);
     head.append(seg, btnCopy, btnHtml, btnDl, btnDocx);
     if (item.kind === 'image') head.append(btnPdf);
+    /* Document recréé : le PDF qui va au bout de la chaîne à l'envers —
+       texte recréé + figures, composés en A4 à l'impression. */
+    if (item.recreated && item.markdown) {
+      const btnPrint = document.createElement('button');
+      btnPrint.type = 'button'; btnPrint.className = 'btn btn-ghost btn-sm'; btnPrint.textContent = 'PDF recréé';
+      btnPrint.title = 'Imprimer le document recréé mis en page A4 (texte, tableaux, figures, maths) — « Enregistrer au format PDF » dans le dialogue, ou impression papier';
+      btnPrint.addEventListener('click', () => printRecreated(item));
+      head.append(btnPrint);
+    }
 
     const body = document.createElement('div');
     body.className = 'result-body';
