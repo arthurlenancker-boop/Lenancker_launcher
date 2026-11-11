@@ -404,7 +404,7 @@
       if (file.size > WARN_FILE_BYTES) {
         window.toast(`${file.name} est volumineux (${fmtSize(file.size)}) : l’OCR peut prendre du temps.`, 'warn', 5200);
       }
-      queue.push({ id: ++seq, file, kind, status: 'pending', dataUrl: null, markdown: null, pages: 0, images: {}, imageDims: {}, confScore: null, skew: 0, recreated: false, annotMode: null, error: null });
+      queue.push({ id: ++seq, file, kind, status: 'pending', dataUrl: null, markdown: null, pages: 0, images: {}, imageDims: {}, confScore: null, skew: 0, recreated: false, annotMode: null, layout: null, detNotes: null, error: null });
       added++;
     }
     if (added) renderQueue();
@@ -657,15 +657,176 @@
 </html>`;
   }
 
+  /*—— Compositeur positionnel : chaque page est une feuille A4 nue, chaque
+     bloc y reprend SA place (fractions × 210/297 mm) et SA taille (pt).
+     Deux étages : positions EXACTES quand la page tient (rien ne dépasse,
+     pas de chevauchement massif) ; sinon EMPILEMENT PAR COLONNES — l'ordre
+     de lecture du modèle est fiable, ses hauteurs gonflent : les blocs se
+     rangent en colonnes (bandes de x), le texte en hauteur auto (jamais
+     rogné), la figure en contain dans l'espace restant, et une colonne qui
+     déborde franchise sacrifie la page → repli linéaire du document.
+     Le k-ième bloc figure rendu (ordre d'apparition) reçoit figure-k —
+     exactement l'ordre des clés de la soudure. Le texte des blocs passe par
+     la même moulinette que l'aperçu (marked + DOMPurify + KaTeX). ——*/
+  function layoutColumnBands(blocs) {
+    const byX = [...blocs].sort((a, b) => (a.x - b.x) || (a.y - b.y));
+    const bands = [];
+    for (const b of byX) {
+      const last = bands[bands.length - 1];
+      if (last && b.x < last.right + 0.04) {
+        last.blocs.push(b);
+        last.right = Math.max(last.right, b.x + b.w);
+      } else {
+        bands.push({ right: b.x + b.w, blocs: [b] });
+      }
+    }
+    return bands.map((bd) => bd.blocs.sort((a, b) => (a.y - b.y) || (a.x - b.x)));
+  }
+
+  function layoutPageFits(blocs) {
+    let maxBottom = 0;
+    for (const b of blocs) maxBottom = Math.max(maxBottom, b.y + b.h);
+    if (maxBottom > 1.01) return false;
+    let overlaps = 0;
+    for (let i = 0; i < blocs.length; i++) {
+      for (let j = i + 1; j < blocs.length; j++) {
+        const a = blocs[i], c = blocs[j];
+        const ix = Math.min(a.x + a.w, c.x + c.w) - Math.max(a.x, c.x);
+        const iy = Math.min(a.y + a.h, c.y + c.h) - Math.max(a.y, c.y);
+        if (ix > 0.02 && iy > 0.01) overlaps++;
+      }
+    }
+    return blocs.length < 3 || overlaps <= (blocs.length * (blocs.length - 1)) / 8;
+  }
+
+  /* Empile une colonne : curseur vertical, hauteur du texte ESTIMÉE (≈0,48 em
+     par caractère, interligne 1,45) mais jamais imposée — le bloc garde sa
+     hauteur auto, seul le curseur avance ; figures cadrées à leurs VRAIES
+     proportions (bbox de la moisson), dans la page. Débordement léger :
+     tout se compresse (scale ≥ 0.88) ; franc : null, la page est sacrifiée
+     et le document repasse en recomposition fluide. */
+  function layoutStackColumn(col, pageBottom, figAspect) {
+    const GAP = 0.006;
+    const start = Math.max(0, Math.min(col[0].y, pageBottom - 0.06));
+    const est = col.map((b) => {
+      if (b.t === 'figure') return Math.min(0.34, Math.max(0.06, b.w * figAspect(b)));
+      const wmm = b.w * 210;
+      const charW = Math.max(1.2, 0.48 * b.pt * 0.3528);
+      const perLine = Math.max(8, Math.floor(wmm / charW));
+      const lines = Math.max(1, Math.ceil(b.txt.length / perLine));
+      return (lines * b.pt * 1.45 * 0.3528) / 297;
+    });
+    const total = est.reduce((s, h) => s + h + GAP, 0);
+    const avail = pageBottom - start;
+    const scale = total > avail ? avail / total : 1;
+    if (scale < 0.88) return null;
+    let cursor = start;
+    return col.map((b, i) => {
+      const placed = b.t === 'figure'
+        ? { ...b, y: cursor, h: est[i] * scale }
+        : { ...b, y: cursor, h: null };
+      cursor += (est[i] + GAP) * scale;
+      return placed;
+    });
+  }
+
+  async function printLayoutBody(layout, item) {
+    /* Pré-numérotation des figures dans l'ordre de rendu (pages, puis bandes
+       de colonnes de gauche à droite) : figure-k reçoit exactement la k-ième
+       image soudée, et ses vraies proportions. */
+    let figK = 0;
+    const figAspect = (b) => {
+      const d = item.imageDims[`figure-${b.figK}`];
+      if (d && d.w > 0 && d.h > 0) return d.h / d.w;
+      return 0.7; // proportions inconnues : raisonnable
+    };
+    for (const pg of layout.pages) {
+      const order = layoutPageFits(pg.blocs) ? pg.blocs : layoutColumnBands(pg.blocs).flat();
+      for (const b of order) if (b.t === 'figure') { figK += 1; b.figK = figK; }
+    }
+
+    const pages = [];
+    for (const pg of layout.pages) {
+      const exact = layoutPageFits(pg.blocs);
+      let placed = null;
+      if (exact) {
+        placed = pg.blocs.map((b) => ({ ...b, figK: b.figK })); // positions du modèle, textes en hauteur auto
+      } else {
+        placed = [];
+        for (const col of layoutColumnBands(pg.blocs)) {
+          const st = layoutStackColumn(col, 0.995, figAspect);
+          if (!st) return null; // page compromise : tout le document repasse en fluide
+          placed.push(...st);
+        }
+      }
+      const blocks = [];
+      for (const b of placed) {
+        /* Figures seules : cadre fixe (contain, jamais déformées) ; le texte
+           coule en hauteur auto — rien n'est jamais rogné par un cadre. */
+        const height = b.t === 'figure' && b.h != null ? `height:${(b.h * 297).toFixed(2)}mm;` : '';
+        const box = `left:${(b.x * 210).toFixed(2)}mm;top:${(b.y * 297).toFixed(2)}mm;width:${(b.w * 210).toFixed(2)}mm;${height}`;
+        if (b.t === 'figure') {
+          const src = item.images[`figure-${b.figK}`];
+          if (!src) continue; // figure sans image moissonnée : on saute, rien de cassé
+          blocks.push(`<img class="blk" alt="figure ${b.figK}" style="${box}object-fit:contain" src="${src}">`);
+          continue;
+        }
+        const inside = await renderPreviewHtml(b.txt, {});
+        const kind = (b.t === 'h1' || b.t === 'h2' || b.t === 'h3') ? 'blk h'
+          : b.t === 'li' ? 'blk li'
+          : b.t === 'caption' ? 'blk capt' : 'blk';
+        blocks.push(`<div class="${kind}" style="${box}font-size:${b.pt}pt">${inside}</div>`);
+      }
+      pages.push(`<section class="page">${blocks.join('')}</section>`);
+    }
+    return pages.join('');
+  }
+
+  function printLayoutDocHtml(body) {
+    const katexCss = new URL('../../assets/vendor/katex/katex.min.css', location.href);
+    return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Document recréé — Lenancker Launcher</title>
+<link rel="stylesheet" href="${katexCss}">
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 11pt/1.45 "Segoe UI", system-ui, -apple-system, sans-serif; color: #111; background: #fff; }
+  .page { position: relative; width: 210mm; height: 297mm; overflow: hidden; page-break-after: always; background: #fff; }
+  .blk { position: absolute; overflow: hidden; color: inherit; }
+  .blk.h { font-weight: 700; }
+  .blk.li { padding-left: 5mm; }
+  .blk.capt { font-style: italic; }
+  img.blk { object-fit: contain; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: .5pt solid #555; padding: .25em .4em; text-align: left; vertical-align: top; }
+  th { background: #f0f0f0; }
+  .katex { font-size: 1.05em; }
+  ol, ul { margin: 0; padding-left: 6mm; }
+  p { margin: 0; }
+</style>
+</head>
+<body>${body}</body>
+</html>`;
+  }
+
   async function printRecreated(item) {
-    const inner = await renderPreviewHtml(item.markdown, item.images);
+    /* Mise en page positionnelle quand la passe LAYOUT a vraiment répondu ET
+       que la composition tient ; recomposition fluide sinon — jamais de PDF
+       cassé. */
+    const hasLay = !!(item.layout && Array.isArray(item.layout.pages) && item.layout.pages.length);
+    const laidBody = hasLay ? await printLayoutBody(item.layout, item) : null;
+    const body = laidBody != null ? laidBody : await renderPreviewHtml(item.markdown, item.images);
+    const doc = laidBody != null ? printLayoutDocHtml(body) : printDocHtml(body);
     const w = window.open('', '_blank', 'width=880,height=1100');
     if (!w) {
       window.toast('Fenêtre d\u2019impression bloquée — autorise les fenêtres surgissantes puis réessaie.', 'warn', 7000);
       return;
     }
     w.document.open();
-    w.document.write(printDocHtml(inner));
+    w.document.write(doc);
     w.document.close();
     const fire = () => setTimeout(() => { try { w.focus(); w.print(); } catch { /* le dialogue reste accessible à la main */ } }, 200);
     if (w.document.readyState === 'complete') fire();
@@ -959,6 +1120,114 @@
     } catch {
       return null;
     }
+  }
+
+  /* —— Passe LAYOUT : mise en page position par position ——
+     Le PDF recréé reproduit la géométrie d'origine, pas seulement le flux :
+     un second passage vision lit chaque page et rend ses blocs (titre,
+     colonnes, encadrés, tableaux, formules, figures) en fractions de page,
+     que le compositeur ancre ABSOLUMENT sur des feuilles A4. Même socle
+     fidèle que la reconstruction (identité, artefacts du scan, interdits) ;
+     échec d'analyse, pages manquantes ou JSON bancal → null, et le PDF
+     retombe sur la recomposition fluide : jamais un PDF cassé. */
+  const LAYOUT_CHUNK = 4; // pages par requête — la précision des positions fond au-delà
+
+  const LAYOUT_DIRECTIVE = [
+    'LIVRAISON EN JSON STRICT, et rien d\u2019autre autour (aucune balise de code) :',
+    '{"pages":[{"n":1,"blocs":[{"t":"h1","x":0.06,"y":0.03,"w":0.88,"h":0.05,"pt":18,"txt":"…"},{"t":"p","x":0.07,"y":0.10,"w":0.86,"h":0.40,"pt":11,"txt":"…"},{"t":"figure","x":0.10,"y":0.55,"w":0.80,"h":0.30,"n":1}]}]}',
+    '"pages" : une entrée par page montrée, dans l\u2019ordre ; "n" : rang de la page dans le lot montré.',
+    '"blocs" : TOUT ce qui est imprimé sur la page — titre, paragraphes, listes, colonnes, encadrés, tableaux, formules, légendes, figures. Deux colonnes = deux séries de blocs côte à côte, chacune à sa position ; un encadré = ses blocs propres groupés.',
+    '"x","y","w","h" : position et étendue du bloc en fractions de la page (0 à 1, origine en haut à gauche) — "x","y" : coin haut-gauche ; "w","h" : largeur et hauteur.',
+    'La page est finie : "y"+"h" ne dépassent JAMAIS 1.00 ; deux blocs ne se chevauchent pas ; ils se rangent de haut en bas de la page.',
+    '"pt" : taille de police utile, en points (corps courant 10 à 11 ; intertitres plus grands, le plus grand pour le titre principal).',
+    '"t" : "h1"|"h2"|"h3"|"p"|"li"|"table"|"math"|"caption"|"figure".',
+    '"txt" : le texte du bloc, recopié selon toutes les règles ci-dessus — listes en lignes Markdown, tableaux en lignes Markdown (| … |), formules en LaTeX $…$ ou $$…$$. RIEN d\u2019inventé, mot illisible → [illisible].',
+    'Bloc "figure" : PAS de "txt" ; "n" = rang d\u2019apparition de la figure dans le document entier (1, 2, 3…) ; sa légende écrite a son propre bloc "caption" juste au-dessus ou en dessous.',
+  ].join('\n');
+
+  /* Socle commun de la reconstruction (identité, tâche, scan-nexiste-pas,
+     interdits, fond, maths) — sans les règles de forme Markdown : la sortie
+     est positionnelle. Annotations « séparer »/« imprimé » : la page recréée
+     ne montre QUE l'imprimé — le manuscrit n'a pas de bloc. */
+  function layoutSystemFor(annot, dropHf) {
+    const base = [VISION_SYSTEM[0], VISION_SYSTEM[1], VISION_SYSTEM[2], VISION_SYSTEM[3], VISION_SYSTEM[4], VISION_SYSTEM[7]].join('\n');
+    let sys = base + '\n\n' + LAYOUT_DIRECTIVE;
+    if (dropHf) sys += '\n\n' + HF_DROP;
+    if (annot === 'printed' || annot === 'separate') sys += '\n\n' + ANNOT_PRINTED;
+    return sys;
+  }
+
+  function parseLayout(out, expected) {
+    try {
+      const m = String(out).match(/\{[\s\S]*\}/); // tolère les balises de code autour du JSON
+      if (!m) return null;
+      const j = JSON.parse(m[0]);
+      const T = new Set(['h1', 'h2', 'h3', 'p', 'li', 'table', 'math', 'caption', 'figure']);
+      if (!Array.isArray(j.pages) || !j.pages.length) return null;
+      const num = (v, lo, hi) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : null;
+      };
+      const pages = [];
+      for (const pg of j.pages) {
+        const blocs = [];
+        for (const b of (Array.isArray(pg && pg.blocs) ? pg.blocs : [])) {
+          if (!b || typeof b !== 'object') continue;
+          const t = String(b.t || '').trim().toLowerCase();
+          if (!T.has(t)) continue;
+          const x = num(b.x, 0, 0.99), y = num(b.y, 0, 0.99);
+          const w = num(b.w, 0.01, 1), h = num(b.h, 0.004, 1);
+          if (x === null || y === null || w === null || h === null) continue;
+          if (t === 'figure') {
+            blocs.push({ t, x, y, w, h, n: num(b.n, 1, 99) || 1 });
+            continue;
+          }
+          const txt = typeof b.txt === 'string' ? b.txt.trim() : '';
+          if (!txt) continue;
+          blocs.push({ t, x, y, w, h, pt: num(b.pt, 6, 34) || 11, txt });
+        }
+        if (!blocs.length) return null; // une page sourde : tout le layout sombre
+        pages.push({ n: num(pg.n, 1, 999) || pages.length + 1, blocs });
+      }
+      if (pages.length !== expected) return null; // couverture partielle : repli fluide
+      return { pages };
+    } catch {
+      return null;
+    }
+  }
+
+  async function pageLayouts(item, key, images) {
+    if (!images || !images.length) return null;
+    const annot = item.annotMode;
+    const annotPrefs = annot ? VISION_ANNOT_PREFS : null;
+    await ensureVisionOrder(key, annotPrefs);
+    const order = visionModelOrder(annotPrefs);
+    const system = layoutSystemFor(annot, !!(els.cleanHf && els.cleanHf.checked));
+    const chunks = [];
+    for (let i = 0; i < images.length; i += LAYOUT_CHUNK) {
+      chunks.push({ from: i + 1, imgs: images.slice(i, i + LAYOUT_CHUNK) });
+    }
+    let lastErr = null;
+    for (const model of order.slice(0, 3)) {
+      try {
+        const pages = [];
+        for (const ch of chunks) {
+          const out = await askVision(model, ch.imgs, key, 1, {
+            system,
+            userText: `Mise en page JSON de ${ch.imgs.length} page(s) de ce document — pages n°${ch.from} à ${ch.from + ch.imgs.length - 1}.`,
+          });
+          const lay = parseLayout(out, ch.imgs.length);
+          if (!lay) throw Object.assign(new Error('json layout invalide'), { soft: true });
+          pages.push(...lay.pages);
+        }
+        return { pages };
+      } catch (e) {
+        // JSON bancal de ce modèle → essayer le suivant ; réseau/quota : abandon silencieux
+        if (e && (e.soft || e.status === 400 || e.status === 404 || e.status === 415 || e.status === 422)) { lastErr = e; continue; }
+        return null;
+      }
+    }
+    return null;
   }
   /* —— Réconciliation « documents annotés » ——
      Deux lectures de la MÊME image (le repérage, puis la reconstruction) ne
@@ -1370,15 +1639,16 @@
     }
   }
 
-  async function iaReconstruct(item, key) {
-    const images = await documentVisionImages(item);
+  async function iaReconstruct(item, key, imagesIn, annotIn) {
+    const images = imagesIn || await documentVisionImages(item);
     if (!images.length) throw new Error('aucune page à reconstruire');
     if (item.kind !== 'image') item.pages = images.length; // PDF rastérisé : badge « N pages » de la carte
 
     /* Documents annotés : le traitement du manuscrit est réglé avant de
        reconstruire (mémorisé, ou demandé au premier repérage), et commande
-       l'ordre des modèles — les gros d'abord pour ces documents-là. */
-    const annot = await resolveAnnotMode(item, images, key);
+       l'ordre des modèles — les gros d'abord pour ces documents-là. Le
+       worker résout une fois et partage avec la passe LAYOUT. */
+    const annot = annotIn !== undefined ? annotIn : await resolveAnnotMode(item, images, key);
     if (annot === 'canceled') throw new Error('reconstruction interrompue : traitement des annotations non choisi — règle-le dans « Annotations manuscrites » puis relance');
     item.annotMode = (annot === 'separate' || annot === 'printed' || annot === 'mixed') ? annot : null;
     const system = visionSystemFor(item.annotMode, !!(els.cleanHf && els.cleanHf.checked));
@@ -1853,21 +2123,29 @@
             /* Mode Recréé par IA : pas d'OCR préalable pour le texte — le
                modèle vision relit les images et recrée le document de zéro ;
                les artefacts du scan (penché, table, cadrage) ne traversent
-               pas. Figures : « Inclure les images » cochée → la chaîne se
-               remet à l'endroit : l'OCR moissonne les figures d'origine en
-               parallèle de la reconstruction et elles sont soudées à leurs
-               repères. Moisson ratée : repères texte, jamais bloquant. */
+               pas. Figures : « Inclure les images » cochée → l'OCR moissonne
+               les figures d'origine en parallèle, soudées à leurs repères.
+               Mise en page : la passe LAYOUT rend les positions des blocs pour
+               que le PDF recréé reproduise la géométrie d'origine ; échec →
+               recomposition fluide, jamais bloquant. */
             setProgressLabel(`Reconstruction IA : ${item.file.name}`);
-            const [md, figs] = await Promise.all([
-              iaReconstruct(item, key),
+            const images = await documentVisionImages(item);
+            const annot = await resolveAnnotMode(item, images, key);
+            if (annot === 'canceled') throw new Error('reconstruction interrompue : traitement des annotations non choisi — règle-le dans « Annotations manuscrites » puis relance');
+            item.annotMode = (annot === 'separate' || annot === 'printed' || annot === 'mixed') ? annot : null;
+            const [md, figs, lay] = await Promise.all([
+              iaReconstruct(item, key, images, annot),
               takeFigs
                 ? harvestFigures(item, key).catch((e) => {
                     window.toast(`Figures non récupérées pour ${item.file.name} — repères texte conservés (${e && e.message ? e.message : e}).`, 'warn', 7000);
                     return null;
                   })
                 : Promise.resolve(null),
+              pageLayouts(item, key, images),
             ]);
+            if (!lay) window.toast(`Mise en page non disponible pour ${item.file.name} — le PDF recréé sera recomposé (fluide).`, 'info', 6000);
             item.markdown = repairTables(takeFigs ? graftFigures(md, figs, item) : md);
+            item.layout = lay;
             item.recreated = true;
             item.status = 'ok';
             window.toast(`Document reconstruit : ${item.file.name}`, 'ok');
@@ -2055,7 +2333,7 @@
     if (item.recreated && item.markdown) {
       const btnPrint = document.createElement('button');
       btnPrint.type = 'button'; btnPrint.className = 'btn btn-ghost btn-sm'; btnPrint.textContent = 'PDF recréé';
-      btnPrint.title = 'Imprimer le document recréé mis en page A4 (texte, tableaux, figures, maths) — « Enregistrer au format PDF » dans le dialogue, ou impression papier';
+      btnPrint.title = 'Imprimer le document recréé — mise en page fidèle aux positions d\u2019origine (colonnes, blocs, figures) quand elle est disponible, sinon recomposition A4 fluide ; « Enregistrer au format PDF » dans le dialogue';
       btnPrint.addEventListener('click', () => printRecreated(item));
       head.append(btnPrint);
     }
