@@ -73,9 +73,10 @@
       store.set(LS_HF, els.cleanHf.checked ? '1' : '0');
     });
   }
-  /* Mode d'analyse : OCR fidèle, ou OCR assisté par IA (après la
-     reconnaissance, un petit modèle Mistral nettoie structure et typo,
-     jamais le fond — garde anti-dérive comprise). */
+  /* Mode d'analyse : OCR fidèle (reconnaissance seule), ou Recréé par IA —
+     pas de reconnaissance préalable : le document original part seul à un
+     modèle vision qui le reconstruit de zéro, fond intouchable, artefacts
+     du scan ignorés. */
   function getMode() { return store.get(LS_MODE) === 'ia' ? 'ia' : 'ocr'; }
   function applyModeUI() {
     const ia = getMode() === 'ia';
@@ -85,7 +86,7 @@
     els.modeIa.setAttribute('aria-pressed', String(ia));
     if (els.modeHint) {
       els.modeHint.textContent = ia
-        ? 'Après l\u2019OCR, un modèle Mistral à vision relit le document original (l\u2019image, ou les pages du PDF une à une) et recrée lui-même le document en Markdown — prompt strict : interdiction d\u2019inventer, de deviner ou de modifier, mot illisible rendu [illisible]. Le stylo est repéré avant la retranscription : ton traitement des annotations manuscrites est demandé une fois, puis mémorisé.'
+        ? 'Chaque image (ou chaque page du PDF) part seule à un modèle Mistral à vision, sans OCR préalable : il recrée de zéro le document en Markdown — contenu identique mot pour mot, rien inventé ni corrigé — en ignorant les artefacts du scan (texte penché, table derrière la feuille, cadrage décentré) et en reconstruisant proprement ordre de lecture, tableaux, césures et titres. Le stylo est repéré avant la reconstruction : son traitement t\u2019est demandé une fois, puis mémorisé.'
         : 'Fidèle au document : le texte sort tel que reconnu, rien n\u2019est modifié.';
     }
     if (els.annotRow) els.annotRow.classList.toggle('hidden', !ia);
@@ -101,7 +102,7 @@
      Un scan de cours annoté au stylo contient deux textes : l'imprimé du
      manuel et les notes de la main. En mode IA, un repérage à bas prix
      (les premières images au modèle vision, réponse JSON minimale) les
-     distingue AVANT la retranscription ; si l'écriture manuscrite y est,
+     distingue AVANT la reconstruction ; si l'écriture manuscrite y est,
      le traitement voulu est demandé une fois (dialogue), puis mémorisé
      via la cascade de stockage — les documents suivants l'appliquent en
      silence, sans plus jamais interrompre. Modifiable à tout moment depuis
@@ -128,7 +129,7 @@
     if (!els.annotPrefs) return;
     const pref = getAnnotPref();
     els.annotPrefs.textContent = `${ANNOT_MODES[pref.mode]}${pref.remember ? ' · mémorisé' : ''} — modifier`;
-    els.annotPrefs.title = 'Traitement appliqué quand une retranscription IA repère de l\u2019écriture manuscrite dans un document (choix mémorisable au moment du repérage).';
+    els.annotPrefs.title = 'Traitement appliqué quand la reconstruction IA repère de l\u2019écriture manuscrite dans un document (choix mémorisable au moment du repérage).';
   }
   if (els.annotPrefs) {
     refreshAnnotRow();
@@ -336,7 +337,7 @@
     if (!v) { setKeyStatus('Colle d’abord ta clé API.', 'err'); return; }
     if (store.set(LS_KEY, v)) {
       refreshKeyUI();
-      renderQueue(); // des fichiers peuvent être déjà en file : réactive « Lancer l'OCR »
+      renderQueue(); // des fichiers peuvent être déjà en file : réactive « Lancer l'analyse »
       setKeyStatus('Clé enregistrée dans ce navigateur.', 'ok');
       window.toast('Clé API enregistrée localement.', 'ok');
     } else {
@@ -403,7 +404,7 @@
       if (file.size > WARN_FILE_BYTES) {
         window.toast(`${file.name} est volumineux (${fmtSize(file.size)}) : l’OCR peut prendre du temps.`, 'warn', 5200);
       }
-      queue.push({ id: ++seq, file, kind, status: 'pending', dataUrl: null, markdown: null, pages: 0, images: {}, imageDims: {}, confScore: null, skew: 0, iaMd: null, annotMode: null, error: null });
+      queue.push({ id: ++seq, file, kind, status: 'pending', dataUrl: null, markdown: null, pages: 0, images: {}, imageDims: {}, confScore: null, skew: 0, recreated: false, annotMode: null, error: null });
       added++;
     }
     if (added) renderQueue();
@@ -716,23 +717,28 @@
     return err.message || 'Erreur inconnue.';
   }
 
-  /* ---------- Retranscription IA (vision, même clé Mistral) ----------
-     Pas un « nettoyage » : le document ORIGINAL est renvoyé au modèle vision —
-     l'image déjà traitée, ou les pages du PDF rastérisées — et le modèle
-     recrée lui-même le document en Markdown. Prompt strictement fermé
-     (copie fidéle, rien d'inventé ni deviné, [illisible] pour l'incertain),
-     température 0. L'OCR brut reste toujours la référence en onglet, et une
-     garde programmatique écarte une retranscription trop écartée en volume. */
+  /* ---------- Reconstruction IA (vision, même clé Mistral) ----------
+     Pas une transcription, un nettoyage ni un correcteur : le modèle vision
+     recrée le document ORIGINAL de zéro — ce qu'il était avant d'être
+     photographié/scanné. Le scan lui-même n'existe pas : texte penché, table
+     autour de la feuille, cadrage décentré sont des artefacts à ignorer,
+     jamais des informations à copier. Le fond reste intouchable (mot pour
+     mot, rien inventé, [illisible] pour l'incertain), température 0 ;
+     l'intelligence porte sur la remise en forme : ordre de lecture,
+     tableaux, césures, hiérarchie des titres. */
   const CHAT_URL = 'https://api.mistral.ai/v1/chat/completions';
   const VISION_SYSTEM = [
-    "Tu es retranscripteur de documents du Lenancker Launcher. Tu reçois une ou plusieurs images d'un document : tu restitues CE document, rien d'autre.",
-    "Ta tâche unique : recopier fidèlement le document en Markdown, comme un transcripteur humain le recopierait à la main — c'est une copie, pas un résumé, pas une correction, pas une création.",
-    "Interdits absolus — toute violation est un échec : répondre au document, l'expliquer, le commenter, le prolonger ou le corriger, même si le document paraît faux ou incomplet ; ajouter, inventer, deviner, résumer, traduire, reformuler ; omettre la moindre ligne imprimée (titres, texte, listes, tableaux, encadrés, formules, légendes).",
-    "Règles de copie : restituer dans l'ordre de lecture, du début à la fin, sans réorganiser ; chiffres, unités, dates, pourcentages, noms propres et formules recopiés à l'IDENTIQUE, jamais arrondis ni convertis ; mot ou groupe de mots illisible → écrire [illisible] à sa place, ne DEVINE jamais ; si les images sont des pages successives d'un même document, la transcription est continue — pas de mention de pages, pas de titres répétés.",
-    "Mise en forme : Markdown propre (titres hiérarchisés #, ##, ### selon la hiérarchie visible, listes, tableaux alignés) ; typographie française (accents sur les majuscules, guillemets « », apostrophe typographique).",
+    "Tu es reconstituteur de documents du Lenancker Launcher. On te montre un ou plusieurs clichés (photo, scan) d'un même document : tu recrées le DOCUMENT ORIGINAL, propre, comme il existait avant d'être photographié — jamais la photo du document.",
+    "Ta tâche unique : reconstruire de zéro, en Markdown, le document que montrent les images, comme quelqu'un qui le retaperait fidèlement à l'identique — c'est la recopie intégrale du fond, pas un résumé, pas une correction, pas une création.",
+    "Le scan n'existe pas : ignore tout artefact du cliché et ne le mentionne jamais — texte ou image penchés, inclinés, photographiés de biais ou en perspective ; table ou fond visible autour de la feuille ; feuille décentrée, coupée ou de travers dans le cadre ; ombres, reflets, courbure, pliures, coins, marges biscornues. Lis et restitue comme si la page était parfaitement droite, seule, face à toi : un mot photographié de travers se recopie droit, sans jamais noter l'angle, le cadrage ni l'arrière-plan.",
+    "Interdits absolus — toute violation est un échec : parler du scan, de la photo ou de leur qualité ; répondre au document, l'expliquer, le commenter, le prolonger ou le corriger, même s'il paraît faux ou incomplet ; ajouter, inventer, deviner, traduire, reformuler, résumer ; corriger l'orthographe ou la langue du document (une coquille d'origine est recopiée telle quelle) ; omettre la moindre ligne (titres, texte, listes, tableaux, encadrés, formules, légendes).",
+    "Fond identique : chiffres, unités, dates, pourcentages, noms propres et formules recopiés à l'IDENTIQUE, jamais arrondis ni convertis ; mot ou groupe de mots illisible → écrire [illisible] à sa place, ne DEVINE jamais.",
+    "Intelligence de reconstruction — tu recrées le document, pas les coordonnées de la photo : ordre de lecture logique du document original (colonnes, encadrés : dans l'ordre où l'original les présentait) ; un tableau — même photographié de travers, en perspective, mal cadré ou n'importe où sur la page — devient un vrai tableau Markdown aligné, en-têtes déduits, à sa place dans le flux ; les mots coupés en fin de ligne par le retour à la ligne du document sont recollés en un seul mot ; la hiérarchie des titres (#, ##, ###) est déduite de la mise en page réelle du document, pas de la taille apparente dans le cliché.",
+    "Mise en forme : Markdown propre (listes, tableaux alignés) ; typographie française (accents sur les majuscules, guillemets « », apostrophe typographique).",
     "Mathématiques en LaTeX fidèle : $…$ en ligne, $$…$$ en bloc (indices, exposants, \\frac{}{}, racines) — la formule du document, jamais « simplifiée ». Chimie : indices et exposants exacts ($MnO_2$, $^{14}C$).",
     "Figures, schémas, photos, captures : remplacés par ![figure](figure-N) numérotés dans l'ordre d'apparition — jamais décrits ni interprétés ; leur légende écrite est recopiée.",
-    "Réponse : uniquement le Markdown du document — aucune introduction, aucune conclusion, aucune balise autour.",
+    "Si les images sont des pages successives d'un même document, la reconstruction est un document continu — pas de mention de pages, pas de titres répétés.",
+    "Réponse : uniquement le Markdown du document recréé — aucune introduction, aucune conclusion, aucune balise autour.",
   ].join('\n');
 
   /* Variantes « documents annotés » : elles ne créent rien, elles ne font que
@@ -740,11 +746,11 @@
      commune (rien d'inventé, [illisible] plutôt qu'une devinette). */
   const ANNOT_PRINTED = [
     'Document annoté : ce document mêle texte imprimé et écriture manuscrite (stylo, crayon : notes en marge, mots ajoutés, corrections, numéros, gribouillis).',
-    'Ta transcription ne reproduit QUE le texte imprimé d\u2019origine. Tout le manuscrit est ignoré, sans exception — n\u2019en transcris pas un mot, où qu\u2019il soit : au-dessus du titre, dans les marges, entre les lignes, tout en bas de page. Une phrase manuscrite peut ressembler à un en-tête ou un pied de page de l\u2019ouvrage — elle n\u2019en est pas un : ne la recopie pas. Les soulignements et surlignages à la main ne sont pas reproduits non plus. Une ligne imprimée barrée ou corrigée à la main reste recopiée telle qu\u2019elle a été imprimée.',
+    'Ta recréation ne reproduit QUE le texte imprimé d\u2019origine. Tout le manuscrit est ignoré, sans exception — n\u2019en transcris pas un mot, où qu\u2019il soit : au-dessus du titre, dans les marges, entre les lignes, tout en bas de page. Une phrase manuscrite peut ressembler à un en-tête ou un pied de page de l\u2019ouvrage — elle n\u2019en est pas un : ne la recopie pas. Les soulignements et surlignages à la main ne sont pas reproduits non plus. Une ligne imprimée barrée ou corrigée à la main reste recopiée telle qu\u2019elle a été imprimée.',
   ].join('\n');
   const ANNOT_SEPARATE = [
     'Document annoté : ce document mêle texte imprimé et écriture manuscrite à la main. Réponse en DEUX parties, dans cet ordre, séparées par une seule ligne « --- » :',
-    'PARTIE 1 : le titre « ## Texte imprimé », puis la transcription fidèle du seul imprimé, selon toutes les règles ci-dessus. Le manuscrit n\u2019y figure JAMAIS, où qu\u2019il soit. Une note manuscrite ressemble parfois à un titre, un en-tête de document ou une liste numérotée — si elle est écrite à la main (graphisme irrégulier, encre différente), c\u2019est du manuscrit : partie 2.',
+    'PARTIE 1 : le titre « ## Texte imprimé », puis la recréation fidèle du seul imprimé, selon toutes les règles ci-dessus. Le manuscrit n\u2019y figure JAMAIS, où qu\u2019il soit. Une note manuscrite ressemble parfois à un titre, un en-tête de document ou une liste numérotée — si elle est écrite à la main (graphisme irrégulier, encre différente), c\u2019est du manuscrit : partie 2.',
     'PARTIE 2 : le titre « ## Annotations manuscrites », puis chaque annotation recopiée fidèlement entre « », groupée par emplacement en sous-titres gras — seulement les emplacements qui contiennent quelque chose, dans l\u2019ordre de haut en bas de la page :',
     '**Haut de page** : au-dessus du premier élément imprimé (titre compris), AVANT tout texte imprimé.',
     '**Marge** : dans les marges latérales, à gauche ou à droite des lignes de texte — jamais au-dessus ni au-dessous de l\u2019ensemble du texte.',
@@ -760,8 +766,15 @@
     'Chaque passage manuscrit est rendu entre « » immédiatement suivi de la mention [manuscrit] ; l\u2019illisible manuscrit devient [illisible]. Le reste suit toutes les règles ci-dessus.',
   ].join('\n');
 
-  function visionSystemFor(annot) {
+  /* Option « Écarter en-têtes et pieds de page » (case à côté du bouton
+     d'analyse) : la reconstruction a son équivalent — les mentions qui
+     reviennent à l'identique sur chaque page sont du mobilier d'édition,
+     pas du contenu. Les légendes et titres réels du document restent. */
+  const HF_DROP = 'En-têtes et pieds de page répétitifs du document (numérotation des pages, mentions de collection ou d\u2019ouvrage qui reviennent à l\u2019identique sur chaque page) : ne les recrée PAS — ils ne sont pas du contenu. Tout ce qui porte une information propre au document (titre de partie, légende, source) est recréé normalement.';
+
+  function visionSystemFor(annot, dropHf) {
     let sys = VISION_SYSTEM;
+    if (dropHf) sys += '\n\n' + HF_DROP;
     if (annot === 'printed') sys += '\n\n' + ANNOT_PRINTED;
     else if (annot === 'separate') sys += '\n\n' + ANNOT_SEPARATE;
     else if (annot === 'mixed') sys += '\n\n' + ANNOT_MIXED;
@@ -770,9 +783,9 @@
 
   /* Repérage du manuscrit : petit aller-retour vision sur les premières
      images, réponse attendue en JSON compact. Le doute (stylo présent ou
-     non, où, quoi) se lève avant la retranscription — jamais au milieu. */
+     non, où, quoi) se lève avant la reconstruction — jamais au milieu. */
   const DETECT_SYSTEM = [
-    'Tu prépares une retranscription documentaire. On te montre une ou plusieurs images d\u2019un même document.',
+    'Tu prépares une reconstruction documentaire. On te montre une ou plusieurs images d\u2019un même document.',
     'Réponds UNIQUEMENT par un objet JSON compact sur une seule ligne — aucun texte autour, aucune balise de code :',
     '{"handwriting": true, "printed": true, "summary": "…", "notes": [{"zone": "haut", "texte": "…"}], "souligne": false}',
     'handwriting : true si de l\u2019écriture manuscrite (stylo, crayon, marqueur) est présente, même partielle — notes en marge, mots ajoutés entre les lignes, corrections, titres ou numéros écrits à la main ; false sinon.',
@@ -809,7 +822,7 @@
     }
   }
   /* —— Réconciliation « documents annotés » ——
-     Deux lectures de la MÊME image (le repérage, puis la retranscription) ne
+     Deux lectures de la MÊME image (le repérage, puis la reconstruction) ne
      dérivent jamais l'une de l'autre en sens : leurs différences sont de la
      reconnaissance de caractères. Le repérage livre donc un inventaire
      (zone + meilleure lecture) qui sert de filet :
@@ -944,21 +957,32 @@
       page.cleanup();
     }
     if (pdf.numPages > n) {
-      window.toast(`${item.file.name} : retranscription limitée aux ${n} premières pages.`, 'warn', 6500);
+      window.toast(`${item.file.name} : reconstruction limitée aux ${n} premières pages.`, 'warn', 6500);
     }
     return urls;
   }
 
-  /* Le document tel que le voit le modèle : l'image traitée, ou les pages PDF. */
+  /* Le document tel que le voit le modèle : l'image traitée (redressée), ou
+     les pages PDF rastérisées. */
+  function isPdfFile(item) {
+    return (item.file.type || '').includes('pdf') || /\.pdf$/i.test(item.file.name);
+  }
+
+  /* Seuls les clichés se « reconstruisent » : photo, scan, PDF de scan. Les
+     .docx/.pptx sont des documents numériques — la reconstruction IA n'y a
+     rien à ignorer, ils restent extraits directement par l'OCR. */
+  function isReconstructible(item) {
+    return item.kind === 'image' || isPdfFile(item);
+  }
+
   async function documentVisionImages(item) {
     if (item.kind === 'image') return [item.dataUrl || await prepareImage(item)];
-    const isPdf = (item.file.type || '').includes('pdf') || /\.pdf$/i.test(item.file.name);
-    if (!isPdf) throw new Error('retranscription vision disponible pour les images et les PDF uniquement');
+    if (!isPdfFile(item)) throw new Error('reconstruction IA disponible pour les images et les PDF uniquement');
     return pdfPagesToImages(item);
   }
 
   /* Modèles vision réellement accessibles à la clé (liste /v1/models),
-     préférences d'abord : le pic de retranscription documentaire d'abord. */
+     préférences d'abord : le pic de reconstruction documentaire d'abord. */
   function pickVisionModel(ids) {
     const list = (Array.isArray(ids) ? ids : []).map((m) => String(m || ''));
     for (const id of VISION_MODEL_PREFS) if (list.includes(id)) return id;
@@ -994,18 +1018,6 @@
     return pinApplies
       ? [visionModelCache, ...order.filter((m) => m !== visionModelCache)]
       : order;
-  }
-
-  /* Garde anti-hallucination : la retranscription doit rester dans le volume
-     de l'OCR — un écart flagrant trahit un résumé ou une dérive ; l'OCR brut
-     reste toujours la référence affichée. Bornes élargies pour les documents
-     annotés : une section Annotations s'ajoute (séparé), ou au contraire
-     l'OCR brut bafouillait du manuscrit que la retranscription retire
-     (imprimé seul). */
-  function retranscribeLooksSane(out, raw, annot) {
-    const lo = annot === 'printed' ? 0.3 : annot === 'separate' ? 0.4 : 0.5;
-    const hi = annot === 'separate' ? 3.0 : 2.5;
-    return out.length >= raw.length * lo && out.length <= raw.length * hi;
   }
 
   async function askVision(model, images, key, attempt, opts) {
@@ -1085,12 +1097,12 @@
 
     const intro = document.createElement('p');
     intro.textContent = cfg.manual
-      ? 'Quand une retranscription IA repère de l\u2019écriture manuscrite dans un document (notes au stylo, corrections, soulignements), elle peut être traitée de trois façons :'
-      : `« ${cfg.fileName || 'ce document'} » semble annoté à la main${cfg.summary ? ` : ${cfg.summary}` : ''}. Que faut-il en faire pendant la retranscription ?`;
+      ? 'Quand la reconstruction IA repère de l\u2019écriture manuscrite dans un document (notes au stylo, corrections, soulignements), elle peut être traitée de trois façons :'
+      : `« ${cfg.fileName || 'ce document'} » semble annoté à la main${cfg.summary ? ` : ${cfg.summary}` : ''}. Que faut-il en faire pendant la reconstruction ?`;
 
     const choices = [
       { value: 'separate', label: 'Séparer', desc: 'Le texte imprimé d\u2019abord, puis une section « Annotations manuscrites » groupée par emplacement (haut de page, marge, bas de page) avec les lignes du texte concernées.' },
-      { value: 'printed', label: 'Texte imprimé seul', desc: 'Le manuscrit est ignoré en entier : aucune note, aucun mot ajouté, aucune correction transcrits — l\u2019OCR brut garde toujours trace de tout, en onglet.' },
+      { value: 'printed', label: 'Texte imprimé seul', desc: 'Le manuscrit est ignoré en entier : aucune note, aucun mot ajouté, aucune correction recopiés — le document est recréé comme si la page était propre.' },
       { value: 'mixed', label: 'Tout transcrire', desc: 'Imprimé et manuscrit mélangés, à l\u2019ordre de lecture du document ; les passages manuscrits sont rendus entre « » suivis de la mention [manuscrit].' },
     ];
     const list = document.createElement('div');
@@ -1164,7 +1176,7 @@
   /* Repérage du stylo : la première tranche d'images suffit la plupart du
      temps (la photo annotée est une seule page). Tout échec (réseau, quota,
      JSON illisible, modèle sans vision) dégrade silencieusement vers la
-     retranscription classique — jamais une file bloquée sur une question. */
+     reconstruction classique — jamais une file bloquée sur une question. */
   async function detectHandwriting(images, key) {
     if (!images.length) return null;
     try {
@@ -1215,33 +1227,32 @@
       return choice.mode;
     } catch {
       item.detNotes = [];
-      return null; // repérage impossible : retranscription classique, fidèle à tout
+      return null; // repérage impossible : reconstruction classique, fidèle à tout
     }
   }
 
-  async function iaRetranscribe(item, key) {
-    const raw = item.markdown || '';
-    if (!raw) throw new Error('aucun texte OCR de référence');
+  async function iaReconstruct(item, key) {
     const images = await documentVisionImages(item);
-    if (!images.length) throw new Error('aucune page à relire');
+    if (!images.length) throw new Error('aucune page à reconstruire');
+    if (item.kind !== 'image') item.pages = images.length; // PDF rastérisé : badge « N pages » de la carte
 
     /* Documents annotés : le traitement du manuscrit est réglé avant de
-       retranscrire (mémorisé, ou demandé au premier repérage), et commande
+       reconstruire (mémorisé, ou demandé au premier repérage), et commande
        l'ordre des modèles — les gros d'abord pour ces documents-là. */
     const annot = await resolveAnnotMode(item, images, key);
-    if (annot === 'canceled') return null; // dialogue fermé : l'OCR brut reste, sans erreur
+    if (annot === 'canceled') throw new Error('reconstruction interrompue : traitement des annotations non choisi — règle-le dans « Annotations manuscrites » puis relance');
     item.annotMode = (annot === 'separate' || annot === 'printed' || annot === 'mixed') ? annot : null;
-    const system = visionSystemFor(item.annotMode);
+    const system = visionSystemFor(item.annotMode, !!(els.cleanHf && els.cleanHf.checked));
     const annotPrefs = item.annotMode ? VISION_ANNOT_PREFS : null;
 
     await ensureVisionOrder(key, annotPrefs);
     const order = visionModelOrder(annotPrefs);
 
     /* L'inventaire du repérage accompagne la demande : une note difficile à
-       lire n'est plus jamais omise — le modèle recopie, le repérage oriente. */
+       lire n'est plus jamais omise — le modèle reconstruit, le repérage oriente. */
     let userText = images.length === 1
-      ? 'Transcris fidèlement ce document.'
-      : 'Transcris fidèlement ces pages du même document, dans l\u2019ordre, en une transcription continue.';
+      ? 'Recrée de zéro ce document : le document original, propre, sans aucune trace du scan.'
+      : 'Recrée de zéro ces pages du même document, dans l\u2019ordre, en un seul document continu — l\u2019original, propre, sans aucune trace du scan.';
     if (item.annotMode && item.detNotes && item.detNotes.length) {
       const inv = item.detNotes.slice(0, 12).map((n) => `« ${n.texte} » (${n.zone})`).join(' ; ');
       userText += ` Éléments manuscrits repérés sur les premières images (lecture approximative du repérage) : s\u2019ils sont visibles, ne les omets pas — recopie ta propre lecture, sans rien inventer. Inventaire : ${inv}.`;
@@ -1265,12 +1276,8 @@
         throw e;
       }
     }
-    if (!out) throw lastErr || new Error('retranscription impossible');
-    out = reconcileAnnots(out, item.annotMode, item.detNotes); // filet : fuites retirées, notes manquantes ajoutées
-    if (!retranscribeLooksSane(out, raw, item.annotMode)) {
-      throw new Error('la retranscription s\u2019écarte trop de l\u2019OCR (résumé ou dérive) — résultat écarté, l\u2019OCR brut reste la référence');
-    }
-    return out;
+    if (!out) throw lastErr || new Error('reconstruction impossible');
+    return reconcileAnnots(out, item.annotMode, item.detNotes); // filet : fuites retirées, notes manquantes ajoutées
   }
 
   /* ---------- PDF « texte sélectionnable » (image du scan + calque invisible) ---------- */
@@ -1696,28 +1703,35 @@
         setItemStatus(item, 'working');
         setProgressLabel(`Analyse : ${item.file.name}`);
         try {
-          if (!item.dataUrl) {
+          const recre = getMode() === 'ia' && isReconstructible(item);
+          if (!item.dataUrl && (item.kind === 'image' || !recre)) {
             item.dataUrl = item.kind === 'image'
               ? await prepareImage(item)
               : await readAsDataURL(item.file);
           }
-          await callOcr(item, key, 1);
-          item.status = 'ok';
-          window.toast(`OCR terminé : ${item.file.name}`, 'ok');
-          if (Number.isFinite(item.confScore) && item.confScore !== null && item.confScore < 0.7) {
-            window.toast(`${item.file.name} : reconnaissance peu fiable (${Math.round(item.confScore * 100)} %) — relis le texte extrait.`, 'warn', 6500);
-          }
-          if (getMode() === 'ia') {
-            try {
-              setProgressLabel(`Retranscription IA : ${item.file.name}`);
-              const ia = await iaRetranscribe(item, key);
-              if (ia) item.iaMd = ia;
-              else window.toast(`Retranscription IA annulée pour ${item.file.name} — l'OCR brut reste.`, 'info', 5000);
-            } catch (e) {
-              window.toast(`Retranscription IA manquée pour ${item.file.name} — l'OCR brut reste.` + (e && e.message ? ` (${e.message})` : ''), 'warn', 7000);
+          if (recre) {
+            /* Mode Recréé par IA : pas d'OCR préalable — le modèle vision
+               relit les images et recrée le document de zéro ; les artefacts
+               du scan (penché, table, cadrage) ne traversent pas. */
+            setProgressLabel(`Reconstruction IA : ${item.file.name}`);
+            item.markdown = repairTables(await iaReconstruct(item, key));
+            item.recreated = true;
+            item.status = 'ok';
+            window.toast(`Document reconstruit : ${item.file.name}`, 'ok');
+          } else {
+            await callOcr(item, key, 1);
+            item.status = 'ok';
+            if (getMode() === 'ia') {
+              // .docx/.pptx : documents numériques — rien à reconstruire, extraction directe
+              window.toast(`${item.file.name} : document numérique — contenu extrait directement, sans reconstruction IA.`, 'info', 7000);
+            } else {
+              window.toast(`OCR terminé : ${item.file.name}`, 'ok');
+            }
+            if (Number.isFinite(item.confScore) && item.confScore !== null && item.confScore < 0.7) {
+              window.toast(`${item.file.name} : reconnaissance peu fiable (${Math.round(item.confScore * 100)} %) — relis le texte extrait.`, 'warn', 6500);
             }
           }
-          item.dataUrl = null; // libère le base64 en mémoire (après la relecture vision)
+          item.dataUrl = null; // libère le base64 en mémoire (après la lecture vision)
         } catch (err) {
           item.status = 'err';
           item.error = friendlyError(err);
@@ -1749,10 +1763,13 @@
     els.empty.classList.toggle('hidden', has);
     els.copyAll.classList.toggle('hidden', !has);
     if (els.pdfAll) {
-      const imageOks = oks.filter((q) => q.kind === 'image').length;
-      els.pdfAll.classList.toggle('hidden', imageOks < 1);
-      els.pdfAll.textContent = `PDF combiné (${imageOks} feuille${imageOks > 1 ? 's' : ''})`;
-      els.pdfAll.title = 'Un seul PDF : chaque scan tel qu\u2019il est, texte invisible sélectionnable, détourage éventuel';
+      const imageOks = oks.filter((q) => q.kind === 'image');
+      const segAny = imageOks.some((q) => (q.segments || []).length > 0);
+      els.pdfAll.classList.toggle('hidden', imageOks.length < 1);
+      els.pdfAll.textContent = `PDF combiné (${imageOks.length} feuille${imageOks.length > 1 ? 's' : ''})`;
+      els.pdfAll.title = segAny
+        ? 'Un seul PDF : chaque scan tel qu\u2019il est, texte invisible sélectionnable, détourage éventuel'
+        : 'Un seul PDF : les feuilles telles quelles (documents recréés par l\u2019IA — sans calque de texte), détourage éventuel';
     }
   }
 
@@ -1789,12 +1806,12 @@
       box.title = "Scan penché détecté et redressé avant l'analyse — caractères, tableaux et calque texte alignés sur l'image corrigée.";
     }
 
-    // traitement appliqué au manuscrit repéré (retranscription IA)
+    // traitement appliqué au manuscrit repéré (reconstruction IA)
     const annotSpan = item.annotMode ? document.createElement('span') : null;
     if (annotSpan) {
       annotSpan.className = 'rscore annot';
       annotSpan.textContent = ANNOT_BADGES[item.annotMode];
-      annotSpan.title = 'Traitement des annotations manuscrites appliqué pendant la retranscription (modifiable dans « Annotations manuscrites », en haut de page).';
+      annotSpan.title = 'Traitement des annotations manuscrites appliqué pendant la reconstruction (modifiable dans « Annotations manuscrites », en haut de page).';
     }
 
     const seg = document.createElement('span');
@@ -1803,19 +1820,15 @@
     btnPreview.type = 'button'; btnPreview.textContent = 'Aperçu'; btnPreview.className = 'active';
     const btnSource = document.createElement('button');
     btnSource.type = 'button'; btnSource.textContent = 'Markdown';
-    const btnIaTab = document.createElement('button');
-    btnIaTab.type = 'button'; btnIaTab.textContent = 'Retranscription IA';
-    btnIaTab.classList.toggle('hidden', !item.iaMd);
-    btnIaTab.title = 'Document recréé fidèlement par le modèle Mistral à vision à partir des images/pages originales (mode OCR assisté par IA) — l\u2019onglet Markdown garde l\u2019OCR brut.';
-    seg.append(btnPreview, btnSource, btnIaTab);
+    seg.append(btnPreview, btnSource);
 
-    /* Version affichée : copies et exports suivent l'onglet actif (brut ou retranscription). */
-    let current = item.markdown;
-    let iaTabActive = false;
+    /* Texte affiché : la reconnaissance OCR, ou le document recréé par l'IA
+       selon le mode — il n'y a qu'une version par document désormais. */
+    const current = item.markdown;
 
     const btnCopy = document.createElement('button');
     btnCopy.type = 'button'; btnCopy.className = 'btn btn-sm'; btnCopy.textContent = 'Copier';
-    btnCopy.title = 'Copier la version affichée (brut ou retranscription selon l’onglet actif)';
+    btnCopy.title = 'Copier le texte affiché';
     btnCopy.addEventListener('click', () => copyText(current, 'Copié.'));
 
     const btnHtml = document.createElement('button');
@@ -1827,9 +1840,9 @@
 
     const btnDl = document.createElement('button');
     btnDl.type = 'button'; btnDl.className = 'btn btn-ghost btn-sm'; btnDl.textContent = '.md';
-    btnDl.title = 'Télécharger la version affichée (.md ou .ia.md)';
+    btnDl.title = `Télécharger le texte en .md${item.recreated ? ' — le document recréé' : ''}`;
     btnDl.addEventListener('click', () => {
-      download(`${base}${iaTabActive ? '.ia' : '.ocr'}.md`, current);
+      download(`${base}${item.recreated ? '' : '.ocr'}.md`, current);
       window.toast('Fichier .md téléchargé.', 'ok');
     });
 
@@ -1841,7 +1854,7 @@
       try {
         await ensureDocx();
         const blob = await window.Md2Docx.mdToDocxBlob(current, item.file.name, item.images, item.imageDims);
-        downloadBlob(`${base}${iaTabActive ? '.ia' : '.ocr'}.docx`, blob);
+        downloadBlob(`${base}${item.recreated ? '' : '.ocr'}.docx`, blob);
         window.toast('Document Word .docx téléchargé — éditable dans Word / LibreOffice.', 'ok');
       } catch (e) {
         window.toast('Export .docx impossible : ' + (e && e.message ? e.message : e), 'err');
@@ -1850,21 +1863,27 @@
       }
     });
 
-    /* PDF « texte sélectionnable » : le scan tel quel + calque de texte invisible. */
+    /* PDF « texte sélectionnable » : le scan tel quel + calque de texte invisible.
+       Document recréé par l'IA : pas de blocs OCR — la feuille seule, sans calque. */
     const btnPdf = document.createElement('button');
     btnPdf.type = 'button'; btnPdf.className = 'btn btn-ghost btn-sm'; btnPdf.textContent = 'PDF';
-    btnPdf.title = 'Télécharger un PDF à texte sélectionnable : la feuille telle qu\u2019elle est, texte invisible par-dessus';
+    btnPdf.title = item.recreated
+      ? 'Télécharger un PDF de la feuille telle quelle (le document recréé ne fournit pas de calque de texte)'
+      : 'Télécharger un PDF à texte sélectionnable : la feuille telle qu\u2019elle est, texte invisible par-dessus';
     btnPdf.addEventListener('click', async () => {
       btnPdf.disabled = true; btnPdf.classList.add('loading');
       try {
-        if (!item.segments || !item.segments.length) {
-          window.toast('Blocs de texte non renvoyés par l\u2019API — le PDF n\u2019aura pas de calque sélectionnable.', 'warn', 6000);
+        const searchable = !!(item.segments && item.segments.length);
+        if (!searchable) {
+          window.toast(item.recreated
+            ? 'Reconstruction IA : le PDF garde la feuille telle quelle, sans calque de texte.'
+            : 'Blocs de texte non renvoyés par l\u2019API — le PDF n\u2019aura pas de calque sélectionnable.', 'warn', 6000);
         }
         await ensurePdfLib();
         const spec = await buildPdfPageSpec(item);
         const bytes = await window.PdfOcr.buildSearchablePdf([spec], base);
-        downloadBlob(`${base}.ocr.pdf`, new Blob([bytes], { type: 'application/pdf' }));
-        window.toast('PDF téléchargé — le texte est sélectionnable dans le document.', 'ok', 5200);
+        downloadBlob(`${base}${item.recreated ? '' : '.ocr'}.pdf`, new Blob([bytes], { type: 'application/pdf' }));
+        window.toast(searchable ? 'PDF téléchargé — le texte est sélectionnable dans le document.' : 'PDF téléchargé.', 'ok', 5200);
       } catch (e) {
         window.toast('Export PDF impossible : ' + (e && e.message ? e.message : e), 'err', 6000);
       } finally {
@@ -1895,25 +1914,18 @@
     const showTab = (which) => {
       btnPreview.classList.toggle('active', which === 'preview');
       btnSource.classList.toggle('active', which === 'source');
-      btnIaTab.classList.toggle('active', which === 'ia');
-      iaTabActive = which === 'ia';
-      current = which === 'ia' ? item.iaMd : item.markdown;
       if (which === 'source') {
         source.value = item.markdown;
         source.classList.remove('hidden'); preview.classList.add('hidden');
       } else {
         (async () => {
-          preview.innerHTML = await renderPreviewHtml(current, item.images);
+          preview.innerHTML = await renderPreviewHtml(item.markdown, item.images);
           preview.classList.remove('hidden'); source.classList.add('hidden');
         })();
       }
     };
     btnPreview.addEventListener('click', () => showTab('preview'));
     btnSource.addEventListener('click', () => showTab('source'));
-    btnIaTab.addEventListener('click', () => showTab('ia'));
-
-    // mode « OCR assisté par IA » : la carte s'ouvre directement sur la retranscription
-    if (item.iaMd) showTab('ia');
 
     body.append(preview, source);
     card.append(head, body);
@@ -1939,8 +1951,8 @@
     if (all) copyText(all, 'Tout le Markdown a été copié.');
   });
 
-  /* Un seul PDF : toutes les feuilles scannées (une page par scan),
-     texte invisible sélectionnable, dans l'ordre de la file. */
+  /* Un seul PDF : toutes les feuilles scannées (une page par scan), dans
+     l'ordre de la file — calque de texte quand l'OCR l'a fourni. */
   if (els.pdfAll) {
     els.pdfAll.addEventListener('click', async () => {
       const items = queue.filter((q) => q.status === 'ok' && q.kind === 'image');
@@ -1953,7 +1965,8 @@
         const bytes = await window.PdfOcr.buildSearchablePdf(specs);
         const name = `scans-ocr-${items.length}-feuille${items.length > 1 ? 's' : ''}.pdf`;
         downloadBlob(name, new Blob([bytes], { type: 'application/pdf' }));
-        window.toast(`PDF de ${items.length} feuille(s) téléchargé — texte sélectionnable.`, 'ok', 5200);
+        const segAny = items.some((q) => (q.segments || []).length > 0);
+        window.toast(`PDF de ${items.length} feuille(s) téléchargé${segAny ? ' — texte sélectionnable' : ''}.`, 'ok', 5200);
       } catch (e) {
         window.toast('Export PDF impossible : ' + (e && e.message ? e.message : e), 'err', 6000);
       } finally {

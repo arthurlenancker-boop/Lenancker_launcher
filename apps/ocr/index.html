@@ -67,7 +67,7 @@
         <label>Mode d&rsquo;analyse</label>
         <div class="seg" role="radiogroup" aria-label="Mode d'analyse">
           <button type="button" class="active" id="mode-ocr" aria-pressed="true">OCR <span class="small muted">(fidèle)</span></button>
-          <button type="button" id="mode-ia" aria-pressed="false">OCR assisté par IA</button>
+          <button type="button" id="mode-ia" aria-pressed="false">Recréé par IA</button>
         </div>
         <p class="small muted" id="mode-hint">Fidèle au document : le texte sort tel que reconnu, rien n&rsquo;est modifié.</p>
         <p class="small muted hidden" id="annot-row">
@@ -89,7 +89,7 @@
 
       <div class="row spread">
         <div class="row">
-          <button class="btn btn-primary" id="run-ocr" type="button" disabled>Lancer l'OCR</button>
+          <button class="btn btn-primary" id="run-ocr" type="button" disabled>Lancer l&rsquo;analyse</button>
           <button class="btn btn-ghost" id="clear-files" type="button" disabled>Tout effacer</button>
           <label class="small muted row" style="gap:.45rem;cursor:pointer">
             <input type="checkbox" id="include-images">
@@ -131,7 +131,7 @@
       </div>
 
       <div class="empty-state glass" id="empty-results">
-        <p class="muted">Aucun résultat pour le moment. Dépose un document et lance l'OCR : le texte extrait apparaîtra ici en <em class="serif-em">Markdown</em>.</p>
+        <p class="muted">Aucun résultat pour le moment. Dépose un document et lance l&rsquo;analyse : selon le mode, le texte extrait ou le document recréé apparaîtra ici en <em class="serif-em">Markdown</em>.</p>
       </div>
 
       <div class="results" id="results"></div>
