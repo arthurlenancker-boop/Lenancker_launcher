@@ -86,7 +86,7 @@
     els.modeIa.setAttribute('aria-pressed', String(ia));
     if (els.modeHint) {
       els.modeHint.textContent = ia
-        ? 'Chaque image (ou chaque page du PDF) part seule à un modèle Mistral à vision, sans OCR préalable : il recrée de zéro le document en Markdown — contenu identique mot pour mot, rien inventé ni corrigé — en ignorant les artefacts du scan (texte penché, table derrière la feuille, cadrage décentré) et en reconstruisant proprement ordre de lecture, tableaux, césures et titres. Le stylo est repéré avant la reconstruction : son traitement t\u2019est demandé une fois, puis mémorisé.'
+        ? 'Chaque image (ou chaque page du PDF) part seule à un modèle Mistral à vision, sans OCR préalable : il recrée de zéro le document en Markdown — contenu identique mot pour mot, rien inventé ni corrigé — en ignorant les artefacts du scan (texte penché, table derrière la feuille, cadrage décentré) et en reconstruisant proprement ordre de lecture, tableaux, césures et titres. La case « Inclure les figures » remet les images d\u2019origine à leur place (appel OCR discret en parallèle) — la chaîne imprimé→scan repart à l\u2019envers. Le stylo est repéré avant la reconstruction : son traitement t\u2019est demandé une fois, puis mémorisé. Les .docx/.pptx, déjà numériques, restent extraits directement.'
         : 'Fidèle au document : le texte sort tel que reconnu, rien n\u2019est modifié.';
     }
     if (els.annotRow) els.annotRow.classList.toggle('hidden', !ia);
@@ -715,6 +715,79 @@
     if (s === 429) return 'Quota ou limite de débit atteinte — réessaie dans un instant.';
     if (s === 400) return `Requête refusée par l’API : ${err.message}`;
     return err.message || 'Erreur inconnue.';
+  }
+
+  /* ---------- La chaîne à l'envers : figures du document original ----------
+     Un document numérique imprimé puis scanné redevient numérique : le texte
+     est recréé par la vision, mais les figures ne se « retapent » pas —
+     l'OCR les moissonne EN PARALLÈLE de la reconstruction (seule sa réponse
+     embarque les images du document, avec leurs proportions), et elles sont
+     soudées aux repères figure-N dans l'ordre d'apparition. Optionnel (case
+     « Inclure les images »), non bloquant : moisson manquée → repères texte. */
+  async function harvestFigures(item, key, attempt = 1) {
+    const document = item.kind === 'image'
+      ? { type: 'image_url', image_url: item.dataUrl || await prepareImage(item) }
+      : { type: 'document_url', document_url: item.dataUrl || await readAsDataURL(item.file) };
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ model: MODEL, document, include_image_base64: true }),
+    });
+    if (!res.ok) {
+      let message = `HTTP ${res.status}`;
+      try {
+        const err = await res.json();
+        if (err && (err.message || err.detail)) message = err.message || err.detail;
+      } catch { /* garde le statut HTTP */ }
+      if ((res.status >= 500 || res.status === 429) && attempt < 2) {
+        await new Promise((r) => setTimeout(r, 1500 * attempt + 1000));
+        return harvestFigures(item, key, attempt + 1);
+      }
+      throw Object.assign(new Error(message), { status: res.status });
+    }
+    const data = await res.json();
+    const figs = [];
+    for (const p of Array.isArray(data.pages) ? data.pages : []) {
+      for (const img of p.images || []) {
+        if (!img.id || !img.image_base64) continue;
+        const ext = String(img.id).split('.').pop().toLowerCase();
+        const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+        const w = Number(img.bottom_right_x) - Number(img.top_left_x);
+        const h = Number(img.bottom_right_y) - Number(img.top_left_y);
+        figs.push({
+          dataUrl: `data:${mime};base64,${img.image_base64}`,
+          w: Number.isFinite(w) && w > 0 ? w : null,
+          h: Number.isFinite(h) && h > 0 ? h : null,
+        });
+      }
+    }
+    return figs;
+  }
+
+  /* Soudure : le k-ième repère de figure rencontré dans le texte reçoit la
+     k-ième figure moissonnée, renuméroté figure-k (clé unique). On ne suit
+     PAS le numéro du modèle : au-delà de 8 pages, chaque tranche repart à
+     figure-1 — l'ordre d'apparition, lui, ne trompe jamais. Alt et url
+     réécrits identiques : la substitution aperçu/.docx (par alt) s'aligne.
+     Pas assez de figures : les derniers repères restent en texte ; trop :
+     l'excédent reste de côté. */
+  function graftFigures(md, figs, item) {
+    const list = Array.isArray(figs) ? figs.filter(Boolean) : [];
+    if (!list.length) return String(md || '');
+    let i = 0;
+    return String(md || '').replace(/!\[([^\]]*)\]\(\s*figure-(?:\d+)\s*\)/g, (whole) => {
+      const fig = list[i];
+      if (!fig) return whole;
+      const k = i + 1;
+      i += 1;
+      const key = `figure-${k}`;
+      item.images[key] = fig.dataUrl;
+      if (fig.w && fig.h) item.imageDims[key] = { w: fig.w, h: fig.h };
+      return `![${key}](${key})`;
+    });
   }
 
   /* ---------- Reconstruction IA (vision, même clé Mistral) ----------
@@ -1704,17 +1777,31 @@
         setProgressLabel(`Analyse : ${item.file.name}`);
         try {
           const recre = getMode() === 'ia' && isReconstructible(item);
-          if (!item.dataUrl && (item.kind === 'image' || !recre)) {
+          const takeFigs = recre && !!(els.includeImages && els.includeImages.checked);
+          if (!item.dataUrl && (item.kind === 'image' || !recre || takeFigs)) {
             item.dataUrl = item.kind === 'image'
               ? await prepareImage(item)
               : await readAsDataURL(item.file);
           }
           if (recre) {
-            /* Mode Recréé par IA : pas d'OCR préalable — le modèle vision
-               relit les images et recrée le document de zéro ; les artefacts
-               du scan (penché, table, cadrage) ne traversent pas. */
+            /* Mode Recréé par IA : pas d'OCR préalable pour le texte — le
+               modèle vision relit les images et recrée le document de zéro ;
+               les artefacts du scan (penché, table, cadrage) ne traversent
+               pas. Figures : « Inclure les images » cochée → la chaîne se
+               remet à l'endroit : l'OCR moissonne les figures d'origine en
+               parallèle de la reconstruction et elles sont soudées à leurs
+               repères. Moisson ratée : repères texte, jamais bloquant. */
             setProgressLabel(`Reconstruction IA : ${item.file.name}`);
-            item.markdown = repairTables(await iaReconstruct(item, key));
+            const [md, figs] = await Promise.all([
+              iaReconstruct(item, key),
+              takeFigs
+                ? harvestFigures(item, key).catch((e) => {
+                    window.toast(`Figures non récupérées pour ${item.file.name} — repères texte conservés (${e && e.message ? e.message : e}).`, 'warn', 7000);
+                    return null;
+                  })
+                : Promise.resolve(null),
+            ]);
+            item.markdown = repairTables(takeFigs ? graftFigures(md, figs, item) : md);
             item.recreated = true;
             item.status = 'ok';
             window.toast(`Document reconstruit : ${item.file.name}`, 'ok');
