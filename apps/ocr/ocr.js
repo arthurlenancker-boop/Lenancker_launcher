@@ -686,9 +686,16 @@
           item.imageDims[img.id] = { w, h };
         }
         if (includeImages && img.image_base64) {
-          const ext = String(img.id).split('.').pop().toLowerCase();
-          const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
-          item.images[img.id] = `data:${mime};base64,${img.image_base64}`;
+          const b64 = String(img.image_base64);
+          if (b64.startsWith('data:')) {
+            // l'API renvoie déjà une URL data: complète (préfixe inclus) —
+            // ne jamais re-préfixer : un double préfixe rend l'image illisible
+            item.images[img.id] = b64;
+          } else {
+            const ext = String(img.id).split('.').pop().toLowerCase();
+            const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+            item.images[img.id] = `data:${mime};base64,${b64}`;
+          }
         }
       }
     }
@@ -753,12 +760,17 @@
     for (const p of Array.isArray(data.pages) ? data.pages : []) {
       for (const img of p.images || []) {
         if (!img.id || !img.image_base64) continue;
-        const ext = String(img.id).split('.').pop().toLowerCase();
-        const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+        const b64 = String(img.image_base64);
+        // l'API renvoie déjà une URL data: complète — ne jamais re-préfixer
+        const dataUrl = b64.startsWith('data:') ? b64 : (() => {
+          const ext = String(img.id).split('.').pop().toLowerCase();
+          const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+          return `data:${mime};base64,${b64}`;
+        })();
         const w = Number(img.bottom_right_x) - Number(img.top_left_x);
         const h = Number(img.bottom_right_y) - Number(img.top_left_y);
         figs.push({
-          dataUrl: `data:${mime};base64,${img.image_base64}`,
+          dataUrl,
           w: Number.isFinite(w) && w > 0 ? w : null,
           h: Number.isFinite(h) && h > 0 ? h : null,
         });
