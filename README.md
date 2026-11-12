@@ -55,6 +55,19 @@ python -m http.server 8000
 
 Aucun build : site 100 % statique (HTML/CSS/JS vanilla).
 
+## Tests
+
+Les moteurs logiques (`apps/focus/core.js`, `apps/revision/core.js`,
+`apps/probabilites/core.js`) sont purs et testables sous Node (UMD :
+`window.*Core` dans le navigateur, `module.exports` sous Node).
+
+```bash
+node --test "tests/*.test.js"   # 41 tests (SM-2, Leitner, machine Focus, arbre)
+```
+
+La CI (`.github/workflows/tests.yml`) lance ces tests et un check syntaxique
+des scripts applicatifs à chaque push et pull request.
+
 ## Packaging Windows (.exe)
 
 ```bash

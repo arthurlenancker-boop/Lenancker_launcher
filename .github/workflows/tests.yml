@@ -1,0 +1,28 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Installer Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Tests des moteurs (Focus, Révision, Arbre)
+        run: node --test "tests/*.test.js"
+
+      - name: Vérification syntaxique des scripts applicatifs
+        run: |
+          find . -name "*.js" \
+            -not -path "./assets/vendor/*" \
+            -not -path "./.git/*" \
+            -exec node --check {} +
