@@ -2,6 +2,7 @@
 var ArbreCore = (function () {
 
   const MAX_LEVELS = 4;
+  const MAX_BRANCHES = 4;
   const SERIF = "Georgia, 'Times New Roman', serif";
 
   // Constantes de mise en page (pixels)
@@ -29,9 +30,18 @@ var ArbreCore = (function () {
       total: '',
       levels: [{ event: 'G', complement: '' }],
       choices: {},   // { idNœud : 'leaf' }  (absent = développé)
+      branches: {},  // { idNœud : nombre de branches }  (absent = 2)
+      labels: {},    // { idEnfant : nom saisi }  branche supplémentaire (index ≥ 2)
       probs: {},     // { idEnfant : texte saisi }  probabilité de la branche
       results: {}    // { idFeuille : texte saisi }  résultat du chemin
     };
+  }
+
+  // Nombre de branches partant d'un nœud (2 à MAX_BRANCHES, 2 par défaut)
+  function branchCount(state, nid) {
+    const v = parseInt(state && state.branches ? state.branches[nid] : null, 10);
+    if (!v || v < 2) return 2;
+    return Math.min(MAX_BRANCHES, v);
   }
 
   // Renseignements sur un nœud à partir de son identifiant (ex. 'R-0-1')
@@ -40,6 +50,10 @@ var ArbreCore = (function () {
     const segs = nid.split('-');
     const depth = segs.length - 1;
     const s = Number(segs[segs.length - 1]);
+    if (s >= 2) {
+      const lbl = state.labels && state.labels[nid];
+      return { base: lbl || '…', auto: false, comp: false, depth };
+    }
     const lvl = (state.levels && state.levels[depth - 1]) || {};
     const base = s === 1 ? (lvl.complement || lvl.event || '…') : (lvl.event || '…');
     return { base, auto: (s === 1) && !lvl.complement, comp: s === 1, depth };
@@ -56,9 +70,13 @@ var ArbreCore = (function () {
       const next = [];
       for (const p of frontier) {
         if (d > 0 && choices[p.id] === 'leaf') continue; // nœud terminé en feuille
-        for (let s = 0; s < 2; s++) {
+        const count = branchCount(state, p.id);
+        for (let s = 0; s < count; s++) {
           const auto = (s === 1) && !lvl.complement;
-          const base = (s === 1 && lvl.complement) ? lvl.complement : (lvl.event || '…');
+          let base;
+          if (s === 1 && lvl.complement) base = lvl.complement;
+          else if (s >= 2) base = (state.labels && state.labels[p.id + '-' + s]) || '…';
+          else base = lvl.event || '…';
           const node = {
             id: p.id + '-' + s, depth: d + 1, parent: p, childIX: s,
             auto, base, children: []
@@ -261,7 +279,7 @@ var ArbreCore = (function () {
   }
 
   return {
-    MAX_LEVELS, escHtml, depthOf, parentOf,
+    MAX_LEVELS, MAX_BRANCHES, escHtml, depthOf, parentOf, branchCount,
     defaultState, nodeInfo, computeLayout, svgInner, exportSvg
   };
 })();
