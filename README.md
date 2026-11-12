@@ -35,6 +35,7 @@ Site publié (GitHub Pages) : **https://arthurlenancker-boop.github.io/Lenancker
 ├── apps/probabilites/          ← app Arbre de probabilité (dessin pas à pas, zéro calcul, core.js testable sous Node)
 ├── docs/                       ← briefs de recherche (Focus/OCR) déployés avec le site
 ├── electron/                   ← wrapper Windows : main.js + package.json (electron-builder)
+├── ml/ocr/                      ← pipeline d'entraînement du modèle OCR local (dataset synthétique, fine-tune TrOCR, évaluation, inférence — voir ml/ocr/README.md)
 └── .github/workflows/deploy.yml ← déploiement GitHub Pages sur push (main)
 ```
 
