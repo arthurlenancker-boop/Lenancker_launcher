@@ -1,5 +1,11 @@
+/* core.js — Mise en page et dessin de l'arbre, découplé du DOM pour être
+   testable sous Node (même convention UMD que FocusCore/RevisionCore). */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.ArbreCore = factory();
+})(typeof self !== 'undefined' ? self : globalThis, function () {
 'use strict';
-var ArbreCore = (function () {
+return (function () {
 
   const MAX_LEVELS = 4;
   const MAX_BRANCHES = 4;
@@ -283,3 +289,4 @@ var ArbreCore = (function () {
     defaultState, nodeInfo, computeLayout, svgInner, exportSvg
   };
 })();
+});

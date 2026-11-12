@@ -274,7 +274,7 @@
     let due = pool.filter((c) => c.lastReview && (Number(c.box) || 1) !== 5 && (c.due || 0) <= now);
     if (o.box != null) due = pool.filter((c) => c.lastReview); // ciblé : hors échéance
     due.sort((a, b) => (a.due || 0) - (b.due || 0) || (a.created - b.created));
-    return fresh.concat(due);
+    return due.concat(fresh);
   }
 
   /* Répartition des boîtes d'un paquet, échéances du jour, part acquise. */
