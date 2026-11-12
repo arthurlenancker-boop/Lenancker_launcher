@@ -259,3 +259,32 @@ code.mono, .mono code { font-size: 0.85em; }
 @media (prefers-reduced-motion: reduce) {
   .dlg-wrap, .dlg { animation: none; }
 }
+
+/* ---------- Révélation « machine à écrire » ----------
+   Chaque mot (.tw) apparaît flou puis devient net ; le curseur clignote
+   le temps de l’écriture puis disparaît (classe .typing retirée en JS). */
+.md-preview.typing .tw {
+  display: inline-block;
+  opacity: 0;
+  filter: blur(6px);
+  animation: tw-sharp 0.7s ease-out forwards;
+}
+@keyframes tw-sharp {
+  60% { opacity: 1; }
+  100% { opacity: 1; filter: blur(0); }
+}
+.md-preview.typing::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  background: var(--accent);
+  vertical-align: -0.15em;
+  animation: tw-caret 1s steps(1) infinite;
+}
+@keyframes tw-caret { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .md-preview.typing .tw { animation: none; opacity: 1; filter: none; }
+  .md-preview.typing::after { display: none; }
+}

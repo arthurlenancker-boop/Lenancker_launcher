@@ -283,6 +283,16 @@
     return docxPromise;
   }
 
+  /* .odt (LibreOffice Writer) : le module md2odt n'a besoin que de marked,
+     déjà chargé — pas de librairie supplémentaire à télécharger. */
+  let odtPromise = null;
+  function ensureOdt() {
+    if (!odtPromise) {
+      odtPromise = loadScript('md2odt.js').catch((e) => { odtPromise = null; throw e; });
+    }
+    return odtPromise;
+  }
+
   let pdfOcrPromise = null;
   function ensurePdfOcr() {
     if (!pdfOcrPromise) {
@@ -2204,6 +2214,51 @@
     }
   }
 
+  /* ---------- Révélation « machine à écrire » ----------
+     À l’apparition d’un résultat, le texte s’écrit mot par mot et chaque mot
+     passe du flou au net. Les maths mises en forme (KaTeX) ne sont pas
+     découpées — leur rendu serait cassé — et l’animation respecte
+     prefers-reduced-motion. */
+  function revealTyped(container) {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+      acceptNode(n) {
+        if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+        let p = n.parentElement;
+        while (p && p !== container) {
+          if (p.classList && p.classList.contains('katex')) return NodeFilter.FILTER_REJECT;
+          p = p.parentElement;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+    const nodes = [];
+    let count = 0;
+    while (walker.nextNode()) {
+      nodes.push(walker.currentNode);
+      count += (walker.currentNode.nodeValue.match(/\S+/g) || []).length;
+    }
+    if (!count) return;
+    const step = Math.min(30, Math.max(5, Math.round(3800 / count)));
+    let i = 0;
+    for (const node of nodes) {
+      const frag = document.createDocumentFragment();
+      for (const part of node.nodeValue.split(/(\s+)/)) {
+        if (!part) continue;
+        if (/^\s+$/.test(part)) { frag.appendChild(document.createTextNode(part)); continue; }
+        const s = document.createElement('span');
+        s.className = 'tw';
+        s.textContent = part;
+        s.style.animationDelay = `${i * step}ms`;
+        i++;
+        frag.appendChild(s);
+      }
+      node.parentNode.replaceChild(frag, node);
+    }
+    container.classList.add('typing');
+    setTimeout(() => container.classList.remove('typing'), i * step + 900);
+  }
+
   async function addResultCard(item) {
     const card = document.createElement('article');
     card.className = 'glass result-card';
@@ -2277,20 +2332,33 @@
       window.toast('Fichier .md téléchargé.', 'ok');
     });
 
-    const btnDocx = document.createElement('button');
-    btnDocx.type = 'button'; btnDocx.className = 'btn btn-ghost btn-sm'; btnDocx.textContent = '.docx';
-    btnDocx.title = 'Télécharger un document Word éditable (.docx) de la version affichée';
-    btnDocx.addEventListener('click', async () => {
-      btnDocx.disabled = true; btnDocx.classList.add('loading');
+    /* Document recréé par l'IA : livré en LibreOffice Writer (.odt) —
+       format natif de la suite Libre, éditable sans conversion.
+       OCR fidèle : l'export .docx (Word) reste disponible. */
+    const btnDoc = document.createElement('button');
+    btnDoc.type = 'button'; btnDoc.className = 'btn btn-ghost btn-sm';
+    btnDoc.textContent = item.recreated ? '.odt' : '.docx';
+    btnDoc.title = item.recreated
+      ? 'Télécharger le document recréé en LibreOffice Writer (.odt) — éditable directement dans Writer'
+      : 'Télécharger un document Word éditable (.docx) de la version affichée';
+    btnDoc.addEventListener('click', async () => {
+      btnDoc.disabled = true; btnDoc.classList.add('loading');
       try {
-        await ensureDocx();
-        const blob = await window.Md2Docx.mdToDocxBlob(current, item.file.name, item.images, item.imageDims);
-        downloadBlob(`${base}${item.recreated ? '' : '.ocr'}.docx`, blob);
-        window.toast('Document Word .docx téléchargé — éditable dans Word / LibreOffice.', 'ok');
+        if (item.recreated) {
+          await ensureOdt();
+          const blob = await window.Md2Odt.mdToOdtBlob(current, item.file.name, item.images);
+          downloadBlob(`${base}.odt`, blob);
+          window.toast('Document LibreOffice Writer .odt téléchargé — éditable directement dans Writer.', 'ok');
+        } else {
+          await ensureDocx();
+          const blob = await window.Md2Docx.mdToDocxBlob(current, item.file.name, item.images, item.imageDims);
+          downloadBlob(`${base}.ocr.docx`, blob);
+          window.toast('Document Word .docx téléchargé — éditable dans Word / LibreOffice.', 'ok');
+        }
       } catch (e) {
-        window.toast('Export .docx impossible : ' + (e && e.message ? e.message : e), 'err');
+        window.toast(`Export ${item.recreated ? '.odt' : '.docx'} impossible : ` + (e && e.message ? e.message : e), 'err');
       } finally {
-        btnDocx.disabled = false; btnDocx.classList.remove('loading');
+        btnDoc.disabled = false; btnDoc.classList.remove('loading');
       }
     });
 
@@ -2326,7 +2394,7 @@
     if (scoreSpan) head.append(scoreSpan);
     if (box) head.append(box);
     if (annotSpan) head.append(annotSpan);
-    head.append(seg, btnCopy, btnHtml, btnDl, btnDocx);
+    head.append(seg, btnCopy, btnHtml, btnDl, btnDoc);
     if (item.kind === 'image') head.append(btnPdf);
     /* Document recréé : le PDF qui va au bout de la chaîne à l'envers —
        texte recréé + figures, composés en A4 à l'impression. */
@@ -2344,6 +2412,7 @@
     const preview = document.createElement('div');
     preview.className = 'md-preview';
     preview.innerHTML = await renderPreviewHtml(item.markdown, item.images);
+    revealTyped(preview);
 
     const source = document.createElement('textarea');
     source.className = 'md-source hidden';
