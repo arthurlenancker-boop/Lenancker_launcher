@@ -1,0 +1,588 @@
+{
+ "fps": 30,
+ "lignes": [
+  {
+   "texte": "Tes notes de cours. Des photos de tableaux. Des PDF partout. Tout ça, il faudrait le retaper à la main.",
+   "duree_s": 9.109,
+   "mots": [
+    {
+     "mot": "Tes",
+     "debut_s": 0.102083,
+     "fin_s": 0.245333
+    },
+    {
+     "mot": "notes",
+     "debut_s": 0.258333,
+     "fin_s": 0.635958
+    },
+    {
+     "mot": "de",
+     "debut_s": 0.648958,
+     "fin_s": 0.792208
+    },
+    {
+     "mot": "cours",
+     "debut_s": 0.805208,
+     "fin_s": 1.286999
+    },
+    {
+     "mot": "Des",
+     "debut_s": 2.186458,
+     "fin_s": 2.368749
+    },
+    {
+     "mot": "photos",
+     "debut_s": 2.381791,
+     "fin_s": 2.746374
+    },
+    {
+     "mot": "de",
+     "debut_s": 2.759375,
+     "fin_s": 2.876583
+    },
+    {
+     "mot": "tableaux",
+     "debut_s": 2.889583,
+     "fin_s": 3.397416
+    },
+    {
+     "mot": "Des",
+     "debut_s": 4.295833,
+     "fin_s": 4.465124
+    },
+    {
+     "mot": "PDF",
+     "debut_s": 4.478125,
+     "fin_s": 4.985958
+    },
+    {
+     "mot": "partout",
+     "debut_s": 4.998958,
+     "fin_s": 5.480749
+    },
+    {
+     "mot": "Tout",
+     "debut_s": 6.39325,
+     "fin_s": 6.562541
+    },
+    {
+     "mot": "ça",
+     "debut_s": 6.575541,
+     "fin_s": 6.835957
+    },
+    {
+     "mot": "il",
+     "debut_s": 7.1875,
+     "fin_s": 7.291666
+    },
+    {
+     "mot": "faudrait",
+     "debut_s": 7.304708,
+     "fin_s": 7.643249
+    },
+    {
+     "mot": "le",
+     "debut_s": 7.65625,
+     "fin_s": 7.760416
+    },
+    {
+     "mot": "retaper",
+     "debut_s": 7.773458,
+     "fin_s": 8.203166
+    },
+    {
+     "mot": "à",
+     "debut_s": 8.216166,
+     "fin_s": 8.255249
+    },
+    {
+     "mot": "la",
+     "debut_s": 8.26825,
+     "fin_s": 8.372416
+    },
+    {
+     "mot": "main",
+     "debut_s": 8.385416,
+     "fin_s": 8.658874
+    }
+   ]
+  },
+  {
+   "texte": "Pas besoin. On va entraîner un modèle OCR, pour toi, qui tourne hors-ligne.",
+   "duree_s": 5.944,
+   "mots": [
+    {
+     "mot": "Pas",
+     "debut_s": 0.102083,
+     "fin_s": 0.271374
+    },
+    {
+     "mot": "besoin",
+     "debut_s": 0.284375,
+     "fin_s": 0.81825
+    },
+    {
+     "mot": "On",
+     "debut_s": 1.717708,
+     "fin_s": 1.821874
+    },
+    {
+     "mot": "va",
+     "debut_s": 1.834916,
+     "fin_s": 1.991166
+    },
+    {
+     "mot": "entraîner",
+     "debut_s": 2.004166,
+     "fin_s": 2.472916
+    },
+    {
+     "mot": "un",
+     "debut_s": 2.485958,
+     "fin_s": 2.577124
+    },
+    {
+     "mot": "modèle",
+     "debut_s": 2.590125,
+     "fin_s": 2.928666
+    },
+    {
+     "mot": "OCR",
+     "debut_s": 2.941666,
+     "fin_s": 3.514582
+    },
+    {
+     "mot": "pour",
+     "debut_s": 3.814083,
+     "fin_s": 3.996374
+    },
+    {
+     "mot": "toi",
+     "debut_s": 4.009375,
+     "fin_s": 4.308875
+    },
+    {
+     "mot": "qui",
+     "debut_s": 4.582291,
+     "fin_s": 4.712499
+    },
+    {
+     "mot": "tourne",
+     "debut_s": 4.725541,
+     "fin_s": 4.959916
+    },
+    {
+     "mot": "hors-ligne",
+     "debut_s": 4.972916,
+     "fin_s": 5.493749
+    }
+   ]
+  },
+  {
+   "texte": "Étape un : on génère cinquante mille lignes de texte — français, anglais, formules de maths — et on les abîme comme de vraies photos : bruit, flou, rotation.",
+   "duree_s": 9.966,
+   "mots": [
+    {
+     "mot": "Étape",
+     "debut_s": 0.102083,
+     "fin_s": 0.531791
+    },
+    {
+     "mot": "un",
+     "debut_s": 0.544791,
+     "fin_s": 0.727082
+    },
+    {
+     "mot": "on",
+     "debut_s": 1.065625,
+     "fin_s": 1.117708
+    },
+    {
+     "mot": "génère",
+     "debut_s": 1.13075,
+     "fin_s": 1.560458
+    },
+    {
+     "mot": "cinquante",
+     "debut_s": 1.573458,
+     "fin_s": 2.003166
+    },
+    {
+     "mot": "mille",
+     "debut_s": 2.016166,
+     "fin_s": 2.198457
+    },
+    {
+     "mot": "lignes",
+     "debut_s": 2.211458,
+     "fin_s": 2.497916
+    },
+    {
+     "mot": "de",
+     "debut_s": 2.510958,
+     "fin_s": 2.654208
+    },
+    {
+     "mot": "texte",
+     "debut_s": 2.667208,
+     "fin_s": 3.057833
+    },
+    {
+     "mot": "français",
+     "debut_s": 3.148958,
+     "fin_s": 3.682833
+    },
+    {
+     "mot": "anglais",
+     "debut_s": 4.086458,
+     "fin_s": 4.411999
+    },
+    {
+     "mot": "formules",
+     "debut_s": 4.763541,
+     "fin_s": 5.180207
+    },
+    {
+     "mot": "de",
+     "debut_s": 5.19325,
+     "fin_s": 5.297416
+    },
+    {
+     "mot": "maths",
+     "debut_s": 5.310416,
+     "fin_s": 5.570832
+    },
+    {
+     "mot": "et",
+     "debut_s": 5.727083,
+     "fin_s": 5.779166
+    },
+    {
+     "mot": "on",
+     "debut_s": 5.792208,
+     "fin_s": 5.857333
+    },
+    {
+     "mot": "les",
+     "debut_s": 5.870333,
+     "fin_s": 5.974499
+    },
+    {
+     "mot": "abîme",
+     "debut_s": 5.9875,
+     "fin_s": 6.391166
+    },
+    {
+     "mot": "comme",
+     "debut_s": 6.404166,
+     "fin_s": 6.651582
+    },
+    {
+     "mot": "de",
+     "debut_s": 6.664583,
+     "fin_s": 6.755749
+    },
+    {
+     "mot": "vraies",
+     "debut_s": 6.76875,
+     "fin_s": 6.964083
+    },
+    {
+     "mot": "photos",
+     "debut_s": 6.977083,
+     "fin_s": 7.458874
+    },
+    {
+     "mot": "bruit",
+     "debut_s": 7.70625,
+     "fin_s": 7.992708
+    },
+    {
+     "mot": "flou",
+     "debut_s": 8.253125,
+     "fin_s": 8.513541
+    },
+    {
+     "mot": "rotation",
+     "debut_s": 8.852083,
+     "fin_s": 9.516166
+    }
+   ]
+  },
+  {
+   "texte": "Étape deux : on fine-tune TrOCR. Un encodeur qui regarde l'image. Un décodeur qui écrit, caractère par caractère.",
+   "duree_s": 10.242,
+   "mots": [
+    {
+     "mot": "Étape",
+     "debut_s": 0.102083,
+     "fin_s": 0.544791
+    },
+    {
+     "mot": "deux",
+     "debut_s": 0.557833,
+     "fin_s": 0.818249
+    },
+    {
+     "mot": "on",
+     "debut_s": 1.169791,
+     "fin_s": 1.208874
+    },
+    {
+     "mot": "fine-tune",
+     "debut_s": 1.221875,
+     "fin_s": 1.690625
+    },
+    {
+     "mot": "TrOCR",
+     "debut_s": 1.703666,
+     "fin_s": 2.680249
+    },
+    {
+     "mot": "Un",
+     "debut_s": 3.58075,
+     "fin_s": 3.710958
+    },
+    {
+     "mot": "encodeur",
+     "debut_s": 3.723958,
+     "fin_s": 4.414083
+    },
+    {
+     "mot": "qui",
+     "debut_s": 4.427083,
+     "fin_s": 4.583333
+    },
+    {
+     "mot": "regarde",
+     "debut_s": 4.596375,
+     "fin_s": 5.052125
+    },
+    {
+     "mot": "l'image",
+     "debut_s": 5.065125,
+     "fin_s": 5.651083
+    },
+    {
+     "mot": "Un",
+     "debut_s": 6.5495,
+     "fin_s": 6.70575
+    },
+    {
+     "mot": "décodeur",
+     "debut_s": 6.71875,
+     "fin_s": 7.34375
+    },
+    {
+     "mot": "qui",
+     "debut_s": 7.356791,
+     "fin_s": 7.513041
+    },
+    {
+     "mot": "écrit",
+     "debut_s": 7.526041,
+     "fin_s": 7.903666
+    },
+    {
+     "mot": "caractère",
+     "debut_s": 8.229166,
+     "fin_s": 8.789082
+    },
+    {
+     "mot": "par",
+     "debut_s": 8.802083,
+     "fin_s": 8.984374
+    },
+    {
+     "mot": "caractère",
+     "debut_s": 8.997416,
+     "fin_s": 9.791707
+    }
+   ]
+  },
+  {
+   "texte": "Étape trois : on mesure. Le CER, c'est le taux d'erreur par caractère. Objectif : moins de cinq pour cent.",
+   "duree_s": 9.135,
+   "mots": [
+    {
+     "mot": "Étape",
+     "debut_s": 0.102083,
+     "fin_s": 0.518749
+    },
+    {
+     "mot": "trois",
+     "debut_s": 0.531791,
+     "fin_s": 0.844291
+    },
+    {
+     "mot": "on",
+     "debut_s": 1.208875,
+     "fin_s": 1.260958
+    },
+    {
+     "mot": "mesure",
+     "debut_s": 1.273958,
+     "fin_s": 1.820833
+    },
+    {
+     "mot": "Le",
+     "debut_s": 2.733333,
+     "fin_s": 2.915624
+    },
+    {
+     "mot": "CER",
+     "debut_s": 2.928666,
+     "fin_s": 3.319291
+    },
+    {
+     "mot": "c'est",
+     "debut_s": 3.644791,
+     "fin_s": 3.814082
+    },
+    {
+     "mot": "le",
+     "debut_s": 3.827083,
+     "fin_s": 3.970333
+    },
+    {
+     "mot": "taux",
+     "debut_s": 3.983333,
+     "fin_s": 4.126583
+    },
+    {
+     "mot": "d'erreur",
+     "debut_s": 4.139583,
+     "fin_s": 4.543249
+    },
+    {
+     "mot": "par",
+     "debut_s": 4.55625,
+     "fin_s": 4.725541
+    },
+    {
+     "mot": "caractère",
+     "debut_s": 4.738541,
+     "fin_s": 5.506791
+    },
+    {
+     "mot": "Objectif",
+     "debut_s": 6.40625,
+     "fin_s": 7.252625
+    },
+    {
+     "mot": "moins",
+     "debut_s": 7.578125,
+     "fin_s": 7.747416
+    },
+    {
+     "mot": "de",
+     "debut_s": 7.760416,
+     "fin_s": 7.890624
+    },
+    {
+     "mot": "cinq",
+     "debut_s": 7.903666,
+     "fin_s": 8.203166
+    },
+    {
+     "mot": "pour",
+     "debut_s": 8.216166,
+     "fin_s": 8.437541
+    },
+    {
+     "mot": "cent",
+     "debut_s": 8.450541,
+     "fin_s": 8.684916
+    }
+   ]
+  },
+  {
+   "texte": "Résultat : ton texte sort de l'image, directement dans le launcher. Le code est prêt. Lance l'entraînement.",
+   "duree_s": 8.587,
+   "mots": [
+    {
+     "mot": "Résultat",
+     "debut_s": 0.102083,
+     "fin_s": 0.844291
+    },
+    {
+     "mot": "ton",
+     "debut_s": 1.169791,
+     "fin_s": 1.326041
+    },
+    {
+     "mot": "texte",
+     "debut_s": 1.339083,
+     "fin_s": 1.755749
+    },
+    {
+     "mot": "sort",
+     "debut_s": 1.76875,
+     "fin_s": 1.990125
+    },
+    {
+     "mot": "de",
+     "debut_s": 2.003125,
+     "fin_s": 2.120333
+    },
+    {
+     "mot": "l'image",
+     "debut_s": 2.133333,
+     "fin_s": 2.719291
+    },
+    {
+     "mot": "directement",
+     "debut_s": 2.979708,
+     "fin_s": 3.565666
+    },
+    {
+     "mot": "dans",
+     "debut_s": 3.578666,
+     "fin_s": 3.708874
+    },
+    {
+     "mot": "le",
+     "debut_s": 3.721875,
+     "fin_s": 3.826041
+    },
+    {
+     "mot": "launcher",
+     "debut_s": 3.839083,
+     "fin_s": 4.320874
+    },
+    {
+     "mot": "Le",
+     "debut_s": 5.221375,
+     "fin_s": 5.416708
+    },
+    {
+     "mot": "code",
+     "debut_s": 5.429708,
+     "fin_s": 5.690124
+    },
+    {
+     "mot": "est",
+     "debut_s": 5.703125,
+     "fin_s": 5.76825
+    },
+    {
+     "mot": "prêt",
+     "debut_s": 5.78125,
+     "fin_s": 6.106791
+    },
+    {
+     "mot": "Lance",
+     "debut_s": 7.004166,
+     "fin_s": 7.342707
+    },
+    {
+     "mot": "l'entraînement",
+     "debut_s": 7.35575,
+     "fin_s": 8.137
+    }
+   ]
+  }
+ ],
+ "total_s": 52.983,
+ "total_frames": 1590
+}
