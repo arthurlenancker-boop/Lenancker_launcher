@@ -57,6 +57,14 @@
     }
     if (!o.levels.length) o.levels = d.levels;
     const idOk = k => /^R(-\d+)+$/.test(k);
+    o.branches = {};
+    if (s.branches && typeof s.branches === 'object') {
+      for (const k of Object.keys(s.branches)) {
+        if (!idOk(k)) continue;
+        const n = parseInt(s.branches[k], 10);
+        if (n >= 2 && n <= ArbreCore.MAX_BRANCHES) o.branches[k] = n;
+      }
+    }
     const cleanMap = (m, len) => {
       const r = {};
       if (m && typeof m === 'object') {
@@ -68,6 +76,7 @@
     };
     o.probs = cleanMap(s.probs, 24);
     o.results = cleanMap(s.results, 24);
+    o.labels = cleanMap(s.labels, 20);
     o.choices = {};
     if (s.choices && typeof s.choices === 'object') {
       for (const k of Object.keys(s.choices)) {
@@ -111,6 +120,35 @@
     if (par === 'R') return 'Vers ' + labHtml(cid);
     return labHtml(par) + ' &#8594; ' + labHtml(cid);
   }
+
+  // Lignes de saisie des branches d'un nœud : probabilité de chacune,
+  // et nom libre pour les branches supplémentaires (index ≥ 2).
+  function branchRows(nid, ph) {
+    const count = ArbreCore.branchCount(state, nid);
+    let h = '';
+    for (let s = 0; s < count; s++) {
+      const cid = nid + '-' + s;
+      const target = labHtml(cid);
+      const lbl = (nid === 'R') ? ('Vers ' + target) : (labHtml(nid) + ' \u2192 ' + target);
+      h += '<label class="prow"><span class="pl" data-child="' + cid + '">' + lbl + '</span>' +
+        '<input class="input pinput" id="prob-' + cid + '" type="text" maxlength="24" placeholder="' + ph + '" value="' + esc(state.probs[cid] || '') + '"></label>';
+      if (s >= 2) {
+        h += '<label class="prow"><span class="pl">Nom de la branche ' + (s + 1) + '</span>' +
+          '<input class="input pinput" id="lab-' + cid + '" type="text" maxlength="20" placeholder="ex. C" value="' + esc(state.labels[cid] || '') + '"></label>';
+      }
+    }
+    return h;
+  }
+
+  function branchSelectHtml(nid) {
+    const cur = ArbreCore.branchCount(state, nid);
+    let opts = '';
+    for (let n = 2; n <= ArbreCore.MAX_BRANCHES; n++) {
+      opts += '<option value="' + n + '"' + (n === cur ? ' selected' : '') + '>' + n + ' branches</option>';
+    }
+    return '<label class="fld"><span class="lbl">Nombre de branches depuis ' + labHtml(nid) + '</span>' +
+      '<select class="input" id="br-' + nid + '">' + opts + '</select></label>';
+  }
   function plainLabel(nid) {
     const i = ArbreCore.nodeInfo(state, nid);
     return i.base + (i.auto ? (state.notation === 'bar' ? ' barre' : ' chapeau') : '');
@@ -148,11 +186,10 @@
           '<input class="input" id="lev0-complement" type="text" maxlength="20" placeholder="vide = barre auto" value="' + esc(l0.complement || '') + '"></label>' +
       '</div>' +
       '<p class="note">Contraire laiss\u00e9 vide : not\u00e9 automatiquement avec la barre (ou l\u2019accent, selon les options du sch\u00e9ma).</p>' +
-      '<div class="sub">Probabilit\u00e9s des deux branches</div>' +
-      '<label class="prow"><span class="pl" data-child="R-0">Vers ' + labHtml('R-0') + '</span>' +
-        '<input class="input pinput" id="prob-R-0" type="text" maxlength="24" placeholder="ex. 0,3" value="' + esc(state.probs['R-0'] || '') + '"></label>' +
-      '<label class="prow"><span class="pl" data-child="R-1">Vers ' + labHtml('R-1') + '</span>' +
-        '<input class="input pinput" id="prob-R-1" type="text" maxlength="24" placeholder="ex. 0,7" value="' + esc(state.probs['R-1'] || '') + '"></label>' +
+      '<div class="sub">Branches issues de la racine</div>' +
+      branchSelectHtml('R') +
+      '<div class="sub">Probabilit\u00e9s des branches</div>' +
+      branchRows('R', 'ex. 0,3') +
     '</section>';
   }
 
@@ -177,11 +214,8 @@
     if (dev.length) {
       prows = '<div class="sub">Probabilit\u00e9s des nouvelles branches</div>';
       for (const p of dev) {
-        for (const s of ['0', '1']) {
-          const cid = p.id + '-' + s;
-          prows += '<label class="prow"><span class="pl" data-child="' + cid + '">' + labHtml(p.id) + ' \u2192 ' + labHtml(cid) + '</span>' +
-            '<input class="input pinput" id="prob-' + cid + '" type="text" maxlength="24" placeholder="ex. 0,6" value="' + esc(state.probs[cid] || '') + '"></label>';
-        }
+        prows += branchSelectHtml(p.id);
+        prows += branchRows(p.id, 'ex. 0,6');
       }
     } else if (nodes.length) {
       prows = '<p class="radio-note">Toutes les branches du niveau ' + d + ' sont des feuilles : aucune nouvelle branche.</p>';
@@ -282,7 +316,7 @@
 
   function pruneUnder(nid) {
     const pre = nid + '-';
-    for (const m of [state.probs, state.results]) {
+    for (const m of [state.probs, state.results, state.labels]) {
       for (const k of Object.keys(m)) if (k.indexOf(pre) === 0) delete m[k];
     }
     for (const k of Object.keys(state.choices)) if (k.indexOf(pre) === 0) delete state.choices[k];
@@ -290,14 +324,15 @@
   function losableUnder(nid) {
     const pre = nid + '-';
     return Object.keys(state.probs).some(k => k.indexOf(pre) === 0 && state.probs[k]) ||
-           Object.keys(state.results).some(k => k.indexOf(pre) === 0 && state.results[k]);
+           Object.keys(state.results).some(k => k.indexOf(pre) === 0 && state.results[k]) ||
+           Object.keys(state.labels).some(k => k.indexOf(pre) === 0 && state.labels[k]);
   }
   function valuesBeyondDepth(dep) {
     const f = m => Object.keys(m).some(k => ArbreCore.depthOf(k) > dep && m[k]);
     return f(state.probs) || f(state.results);
   }
   function pruneFromDepth(dep) {
-    for (const m of [state.probs, state.results]) {
+    for (const m of [state.probs, state.results, state.labels]) {
       for (const k of Object.keys(m)) if (ArbreCore.depthOf(k) > dep) delete m[k];
     }
     for (const k of Object.keys(state.choices)) if (ArbreCore.depthOf(k) >= dep) delete state.choices[k];
@@ -314,6 +349,32 @@
     if (state.levels.length >= ArbreCore.MAX_LEVELS) return;
     const letters = ['A', 'B', 'C'];
     state.levels.push({ event: letters[state.levels.length - 1] || 'E', complement: '' });
+    renderAll();
+    save();
+  }
+
+  function setBranchCount(nid, n) {
+    const val = Math.min(ArbreCore.MAX_BRANCHES, Math.max(2, parseInt(n, 10) || 2));
+    const old = ArbreCore.branchCount(state, nid);
+    if (val === old) { renderAll(); return; }
+    if (val < old) {
+      let losing = false;
+      for (let s = val; s < old; s++) {
+        const cid = nid + '-' + s;
+        losing = losing || losableUnder(cid) || !!state.probs[cid] || !!state.labels[cid];
+      }
+      if (losing && !window.confirm('R\u00e9duire \u00e0 ' + val + ' branches depuis ce n\u0153ud ? Les branches en trop et leurs valeurs seront supprim\u00e9es.')) {
+        renderAll(); return;
+      }
+      for (let s = val; s < old; s++) {
+        const cid = nid + '-' + s;
+        pruneUnder(cid);
+        delete state.probs[cid];
+        delete state.labels[cid];
+        delete state.choices[cid];
+      }
+    }
+    state.branches[nid] = val;
     renderAll();
     save();
   }
@@ -343,6 +404,11 @@
       lvl[m[2]] = t.value;
       renderDiagram(); refreshMathLabels(); saveSoon(); return;
     }
+    if (t.id.indexOf('lab-') === 0) {
+      const cid = t.id.slice(4);
+      if (t.value) state.labels[cid] = t.value; else delete state.labels[cid];
+      renderDiagram(); refreshMathLabels(); saveSoon(); return;
+    }
     if (t.id.indexOf('prob-') === 0) {
       state.probs[t.id.slice(5)] = t.value;
       renderDiagram(); saveSoon();
@@ -351,7 +417,12 @@
 
   panel.addEventListener('change', function (ev) {
     const t = ev.target;
-    if (!t || t.type !== 'radio') return;
+    if (!t) return;
+    if (t.tagName === 'SELECT' && t.id.indexOf('br-') === 0) {
+      setBranchCount(t.id.slice(3), t.value);
+      return;
+    }
+    if (t.type !== 'radio') return;
     const nid = t.name && t.name.indexOf('ch-') === 0 ? t.name.slice(3) : null;
     if (!nid) return;
     if (t.value === 'leaf') {
