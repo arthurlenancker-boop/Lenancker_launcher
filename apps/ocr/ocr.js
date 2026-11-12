@@ -2332,31 +2332,22 @@
       window.toast('Fichier .md téléchargé.', 'ok');
     });
 
-    /* Document recréé par l'IA : livré en LibreOffice Writer (.odt) —
-       format natif de la suite Libre, éditable sans conversion.
-       OCR fidèle : l'export .docx (Word) reste disponible. */
+    /* Le document téléchargeable est livré en LibreOffice Writer (.odt) —
+       format natif de la suite Libre, éditable sans conversion — quel que soit
+       le mode (OCR fidèle ou recréé par l'IA). */
     const btnDoc = document.createElement('button');
     btnDoc.type = 'button'; btnDoc.className = 'btn btn-ghost btn-sm';
-    btnDoc.textContent = item.recreated ? '.odt' : '.docx';
-    btnDoc.title = item.recreated
-      ? 'Télécharger le document recréé en LibreOffice Writer (.odt) — éditable directement dans Writer'
-      : 'Télécharger un document Word éditable (.docx) de la version affichée';
+    btnDoc.textContent = '.odt';
+    btnDoc.title = 'Télécharger le document en LibreOffice Writer (.odt) — éditable directement dans Writer';
     btnDoc.addEventListener('click', async () => {
       btnDoc.disabled = true; btnDoc.classList.add('loading');
       try {
-        if (item.recreated) {
-          await ensureOdt();
-          const blob = await window.Md2Odt.mdToOdtBlob(current, item.file.name, item.images);
-          downloadBlob(`${base}.odt`, blob);
-          window.toast('Document LibreOffice Writer .odt téléchargé — éditable directement dans Writer.', 'ok');
-        } else {
-          await ensureDocx();
-          const blob = await window.Md2Docx.mdToDocxBlob(current, item.file.name, item.images, item.imageDims);
-          downloadBlob(`${base}.ocr.docx`, blob);
-          window.toast('Document Word .docx téléchargé — éditable dans Word / LibreOffice.', 'ok');
-        }
+        await ensureOdt();
+        const blob = await window.Md2Odt.mdToOdtBlob(current, item.file.name, item.images);
+        downloadBlob(`${base}${item.recreated ? '' : '.ocr'}.odt`, blob);
+        window.toast('Document LibreOffice Writer .odt téléchargé — éditable directement dans Writer.', 'ok');
       } catch (e) {
-        window.toast(`Export ${item.recreated ? '.odt' : '.docx'} impossible : ` + (e && e.message ? e.message : e), 'err');
+        window.toast('Export .odt impossible : ' + (e && e.message ? e.message : e), 'err');
       } finally {
         btnDoc.disabled = false; btnDoc.classList.remove('loading');
       }
@@ -2411,6 +2402,12 @@
 
     const preview = document.createElement('div');
     preview.className = 'md-preview';
+    /* Mode « Recréé par IA » : l'aperçu est celui du .odt livré — page
+       LibreOffice Writer (papier, serif, marges), même animation d'écriture. */
+    if (item.recreated) {
+      preview.classList.add('odt-page');
+      btnPreview.title = 'Aperçu du document LibreOffice Writer (.odt) tel qu\u2019il sera téléchargé';
+    }
     preview.innerHTML = await renderPreviewHtml(item.markdown, item.images);
     revealTyped(preview);
 
