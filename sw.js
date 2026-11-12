@@ -54,6 +54,7 @@ const CORE = [
   'apps/ocr/ocr.css',
   'apps/ocr/ocr.js',
   'apps/ocr/md2docx.js',
+  'apps/ocr/md2odt.js',
   'apps/ocr/pdfocr.js',
   'apps/focus/index.html',
   'apps/focus/focus.css',
