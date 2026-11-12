@@ -13,6 +13,7 @@
   const LS_MODE = 'lenancker.ocr.mode';
   const LS_ANNOTS_MODE = 'lenancker.ocr.annots.mode';       // 'separate' | 'printed' | 'mixed'
   const LS_ANNOTS_REMEMBER = 'lenancker.ocr.annots.remember'; // '1' = choix mémorisé, plus de question
+  const LS_PAGEMARK = 'lenancker.ocr.pageMarks';
   const MAX_FILE_BYTES = 50 * 1024 * 1024; // limite API Mistral : 50 Mo
   const WARN_FILE_BYTES = 20 * 1024 * 1024;
 
@@ -49,6 +50,7 @@
     results: $('results'), empty: $('empty-results'), copyAll: $('copy-all'),
     includeImages: $('include-images'), trimPage: $('trim-page'), cleanHf: $('clean-hf'),
     modeOcr: $('mode-ocr'), modeIa: $('mode-ia'), modeHint: $('mode-hint'), pdfAll: $('pdf-all'),
+    pageMarks: $('page-marks'),
     annotRow: $('annot-row'), annotPrefs: $('annot-prefs'),
   };
   // Préférences persistées via la cascade de stockage (voir common.js) :
@@ -71,6 +73,12 @@
     els.cleanHf.checked = store.get(LS_HF) !== '0'; // en-têtes/pieds de page écartés par défaut
     els.cleanHf.addEventListener('change', () => {
       store.set(LS_HF, els.cleanHf.checked ? '1' : '0');
+    });
+  }
+  if (els.pageMarks) {
+    els.pageMarks.checked = store.get(LS_PAGEMARK) !== '0'; // marqueurs « ### Page N » par défaut
+    els.pageMarks.addEventListener('change', () => {
+      store.set(LS_PAGEMARK, els.pageMarks.checked ? '1' : '0');
     });
   }
   /* Mode d'analyse : OCR fidèle (reconnaissance seule), ou Recréé par IA —
@@ -897,7 +905,14 @@
 
     const data = await res.json();
     const pages = Array.isArray(data.pages) ? data.pages : [];
-    item.markdown = repairTables(pages.map((p) => p.markdown || '').join('\n\n').trim());
+    // Marqueurs de page : « ### Page N » sépare chaque page du document source,
+    // repris en vrai saut de page par les exports .odt/.docx.
+    const markPages = !!(els.pageMarks && els.pageMarks.checked) && pages.length > 1;
+    item.markdown = repairTables(pages.map((p, i) => {
+      const md = p.markdown || '';
+      if (!markPages || !md.trim()) return md;
+      return `${i > 0 ? '---\n\n' : ''}### Page ${i + 1}\n\n${md}`;
+    }).join('\n\n').trim());
     item.pages = data.usage_info?.pages_processed ?? pages.length;
     item.images = {};
     item.imageDims = {};

@@ -130,6 +130,26 @@
     return runs.length ? runs : [new docx.TextRun({ text: '', ...st })];
   }
 
+  /* Marqueur de page posé par ocr.js : « --- ### Page N » devient un vrai
+     saut de page Word, le numéro reste visible en tête de la nouvelle page. */
+  const PAGE_MARK_RE = /^page\s+\d+$/i;
+  function prevNonSpace(toks, i) {
+    for (let j = i - 1; j >= 0; j--) {
+      if (toks[j].type !== 'space') return toks[j];
+    }
+    return null;
+  }
+  function nextNonSpace(toks, i) {
+    for (let j = i + 1; j < toks.length; j++) {
+      if (toks[j].type !== 'space') return toks[j];
+    }
+    return null;
+  }
+  function isPageMarkHeading(t, prev) {
+    return t && t.type === 'heading' && t.depth === 3 && PAGE_MARK_RE.test(String(t.text || '').trim())
+      && prev && prev.type === 'hr';
+  }
+
   /* Convertit les tokens block marked en éléments docx (Paragraph / Table). */
   function blocksToElements(tokens, level, quote, images, imageDims) {
     const lv = level || 0;
@@ -138,9 +158,20 @@
       border: { left: { color: 'FF5310', size: 12, style: docx.BorderStyle.SINGLE, space: 8 } },
     } : {};
     const els = [];
-    for (const t of tokens || []) {
+    const toks = tokens || [];
+    for (let i = 0; i < toks.length; i++) {
+      const t = toks[i];
+      const prev = prevNonSpace(toks, i);
+      const next = nextNonSpace(toks, i);
       switch (t.type) {
         case 'heading':
+          if (isPageMarkHeading(t, prev)) {
+            els.push(new docx.Paragraph({
+              pageBreakBefore: true,
+              children: [new docx.TextRun({ text: t.text, bold: true, color: '666666', size: 20 })],
+            }));
+            break;
+          }
           els.push(new docx.Paragraph({
             heading: docx.HeadingLevel[HEADING_KEYS[Math.min(6, t.depth) - 1]],
             children: inlineToRuns(t.tokens, null, images, imageDims),
@@ -206,6 +237,7 @@
           els.push(...blocksToElements(t.tokens, lv, true, images, imageDims));
           break;
         case 'hr':
+          if (isPageMarkHeading(next, t)) break; // le saut de page remplace le trait
           els.push(new docx.Paragraph({
             children: [],
             border: { bottom: { color: 'A8A294', size: 6, style: docx.BorderStyle.SINGLE, space: 1 } },

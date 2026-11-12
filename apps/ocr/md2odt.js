@@ -169,11 +169,38 @@
   }
 
   /* ---------- Blocs (tokens marked → ODF) ---------- */
+  /* Marqueur de page posé par ocr.js : « --- ### Page N » devient un vrai
+     saut de page, le numéro reste visible en tête de la nouvelle page. */
+  const PAGE_MARK_RE = /^page\s+\d+$/i;
+  function prevNonSpace(toks, i) {
+    for (let j = i - 1; j >= 0; j--) {
+      if (toks[j].type !== 'space') return toks[j];
+    }
+    return null;
+  }
+  function nextNonSpace(toks, i) {
+    for (let j = i + 1; j < toks.length; j++) {
+      if (toks[j].type !== 'space') return toks[j];
+    }
+    return null;
+  }
+  function isPageMarkHeading(t, prev) {
+    return t && t.type === 'heading' && t.depth === 3 && PAGE_MARK_RE.test(String(t.text || '').trim())
+      && prev && prev.type === 'hr';
+  }
   function blocksToOdf(tokens, images, ctx, depth) {
     let out = '';
-    for (const t of tokens || []) {
+    const toks = tokens || [];
+    for (let i = 0; i < toks.length; i++) {
+      const t = toks[i];
+      const prev = prevNonSpace(toks, i);
+      const next = nextNonSpace(toks, i);
       switch (t.type) {
         case 'heading': {
+          if (isPageMarkHeading(t, prev)) {
+            out += `<text:p text:style-name="PageMark">${esc(t.text)}</text:p>`;
+            break;
+          }
           const lvl = Math.min(6, t.depth);
           out += `<text:h text:outline-level="${lvl}">${inlineToOdf(t.tokens, images, ctx)}</text:h>`;
           break;
@@ -190,6 +217,7 @@
           break;
         }
         case 'hr':
+          if (isPageMarkHeading(next, t)) break; // le saut de page remplace le trait
           out += '<text:p text:style-name="HR"/>';
           break;
         case 'list': {
@@ -251,6 +279,7 @@
       '<style:style style:name="Preformatted" style:family="paragraph"><style:text-properties style:font-name="Consolas" fo:font-size="9pt"/></style:style>' +
       '<style:style style:name="TH" style:family="paragraph"><style:text-properties fo:font-weight="bold"/></style:style>' +
       '<style:style style:name="HR" style:family="paragraph" style:parent-style-name="Standard"><style:paragraph-properties fo:border-bottom="0.5pt solid #999999" fo:padding-bottom="0.1cm"/></style:style>' +
+      '<style:style style:name="PageMark" style:family="paragraph" style:parent-style-name="Standard"><style:paragraph-properties fo:break-before="page" fo:margin-bottom="0.3cm"/><style:text-properties fo:font-weight="bold" fo:color="#666666" fo:font-size="10pt"/></style:style>' +
       '</office:automatic-styles>' +
       '<office:body><office:text>' +
       (title ? `<text:h text:outline-level="1">${esc(title)}</text:h>` : '') +
