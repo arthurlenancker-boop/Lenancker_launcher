@@ -288,3 +288,28 @@ code.mono, .mono code { font-size: 0.85em; }
   .md-preview.typing .tw { animation: none; opacity: 1; filter: none; }
   .md-preview.typing::after { display: none; }
 }
+
+/* ---------- Aperçu du .odt (mode « Recréé par IA ») ----------
+   La page blanche du document LibreOffice Writer tel qu’il sera téléchargé :
+   fond papier, serif de corps de texte, marges — l’animation machine à
+   écrire s’applique telle quelle par-dessus. */
+.md-preview.odt-page {
+  background: #fffdf8;
+  color: #191919;
+  font-family: 'Liberation Serif', 'Times New Roman', Georgia, serif;
+  font-size: 12pt;
+  line-height: 1.42;
+  padding: 1.5rem 1.8rem;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  border-radius: 3px;
+  box-shadow: 0 3px 18px rgba(0, 0, 0, 0.35);
+}
+.md-preview.odt-page h1, .md-preview.odt-page h2, .md-preview.odt-page h3 { color: #000; }
+.md-preview.odt-page pre { background: #f3f3f3; border-color: #c9c9c9; }
+.md-preview.odt-page code { background: #efefef; color: #191919; }
+.md-preview.odt-page th { background: #e8e8e8; color: #191919; }
+.md-preview.odt-page th, .md-preview.odt-page td { border-color: #8f8f8f; }
+.md-preview.odt-page blockquote { border-left-color: #8f8f8f; color: #4d4d4d; }
+.md-preview.odt-page a { color: #1a4f8f; }
+.md-preview.odt-page img { border-color: #c9c9c9; }
+.md-preview.odt-page.typing::after { background: #191919; }

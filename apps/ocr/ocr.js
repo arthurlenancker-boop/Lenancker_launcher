@@ -2402,6 +2402,12 @@
 
     const preview = document.createElement('div');
     preview.className = 'md-preview';
+    /* Mode « Recréé par IA » : l'aperçu est celui du .odt livré — page
+       LibreOffice Writer (papier, serif, marges), même animation d'écriture. */
+    if (item.recreated) {
+      preview.classList.add('odt-page');
+      btnPreview.title = 'Aperçu du document LibreOffice Writer (.odt) tel qu\u2019il sera téléchargé';
+    }
     preview.innerHTML = await renderPreviewHtml(item.markdown, item.images);
     revealTyped(preview);
 
