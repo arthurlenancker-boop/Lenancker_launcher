@@ -46,6 +46,8 @@
     }
     card.className = `app-card reveal${isSoon ? ' soon' : ''}${featured ? ' featured' : ''}`;
     card.style.setProperty('--d', `${0.34 + i * 0.09}s`);
+    /* Couleur propre de l'app : teinte le halo et la lueur du survol. */
+    card.style.setProperty('--app-accent', app.accent || 'var(--accent)');
     const body = featured
       ? `<span class="app-body"><h2>${app.name}</h2><p>${app.desc}</p></span>`
       : `<h2>${app.name}</h2><p>${app.desc}</p>`;
