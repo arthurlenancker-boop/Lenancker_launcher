@@ -309,6 +309,26 @@
     return pdfOcrPromise;
   }
 
+  /* ---------- WordCraft : suite naturelle quand le module a écrit un document ---------- */
+  const WORDCRAFT_URL = 'https://artcraftsuite.org/app/wordcraft/';
+  /* Télécharge le .odt (même export que le bouton .odt) puis ouvre le build
+     web officiel de WordCraft — traitement de texte open source qui tourne
+     entièrement dans le navigateur : Fichier → Ouvrir, et le document ne
+     quitte jamais la machine. Sert le bouton « WordCraft » de la carte
+     résultat et l'action du toast de fin d'analyse. */
+  async function sendToWordcraft(item) {
+    try {
+      await ensureOdt();
+      const blob = await window.Md2Odt.mdToOdtBlob(item.markdown, item.file.name, item.images);
+      const base = item.file.name.replace(/\.[^.]+$/, '');
+      downloadBlob(`${base}${item.recreated ? '' : '.ocr'}.odt`, blob);
+      window.open(WORDCRAFT_URL, '_blank', 'noopener');
+      window.toast('Document .odt téléchargé — dans WordCraft : Fichier → Ouvrir, puis corrige et mets en page librement.', 'ok', 9000);
+    } catch (e) {
+      window.toast('Export .odt impossible : ' + (e && e.message ? e.message : e), 'err');
+    }
+  }
+
   let pdfLibPromise = null;
   function ensurePdfLib() {
     if (!pdfLibPromise) {
@@ -2173,15 +2193,24 @@
             item.layout = lay;
             item.recreated = true;
             item.status = 'ok';
-            window.toast(`Document reconstruit : ${item.file.name}`, 'ok');
+            window.toast(`Document reconstruit : ${item.file.name}`, 'ok', 3800, {
+              label: 'WordCraft',
+              onClick: () => sendToWordcraft(item),
+            });
           } else {
             await callOcr(item, key, 1);
             item.status = 'ok';
             if (getMode() === 'ia') {
               // .docx/.pptx : documents numériques — rien à reconstruire, extraction directe
-              window.toast(`${item.file.name} : document numérique — contenu extrait directement, sans reconstruction IA.`, 'info', 7000);
+              window.toast(`${item.file.name} : document numérique — contenu extrait directement, sans reconstruction IA.`, 'info', 7000, {
+                label: 'WordCraft',
+                onClick: () => sendToWordcraft(item),
+              });
             } else {
-              window.toast(`OCR terminé : ${item.file.name}`, 'ok');
+              window.toast(`OCR terminé : ${item.file.name}`, 'ok', 3800, {
+                label: 'WordCraft',
+                onClick: () => sendToWordcraft(item),
+              });
             }
             if (Number.isFinite(item.confScore) && item.confScore !== null && item.confScore < 0.7) {
               window.toast(`${item.file.name} : reconnaissance peu fiable (${Math.round(item.confScore * 100)} %) — relis le texte extrait.`, 'warn', 6500);
@@ -2368,30 +2397,17 @@
       }
     });
 
-    /* WordCraft : quand le launcher a écrit un document (OCR fidèle ou recréé
+    /* WordCraft : quand le module a écrit un document (OCR fidèle ou recréé
        par l'IA), il a besoin d'un traitement de texte pour continuer —
-       rédiger, corriger, mettre en page. On télécharge le .odt (même export
-       que le bouton .odt) puis on ouvre le build web officiel de WordCraft
-       (open source, tourne entièrement dans le navigateur) : Fichier →
-       Ouvrir, et le fichier ne quitte jamais la machine. La correction IA,
-       elle, se fait ici avec la clé Mistral (mode « Recréé par IA »,
-       bouton « Nettoyer »). */
+       rédiger, corriger, mettre en page. La correction IA, elle, se fait ici
+       avec la clé Mistral (mode « Recréé par IA », bouton « Nettoyer »). */
     const btnWc = document.createElement('button');
     btnWc.type = 'button'; btnWc.className = 'btn btn-ghost btn-sm'; btnWc.textContent = 'WordCraft';
     btnWc.title = 'Télécharger le document en .odt et l\u2019ouvrir dans WordCraft — traitement de texte complet dans le navigateur (ruban, styles, tableaux, suivi des modifications) ; le fichier ne quitte pas ta machine';
     btnWc.addEventListener('click', async () => {
       btnWc.disabled = true; btnWc.classList.add('loading');
-      try {
-        await ensureOdt();
-        const blob = await window.Md2Odt.mdToOdtBlob(current, item.file.name, item.images);
-        downloadBlob(`${base}${item.recreated ? '' : '.ocr'}.odt`, blob);
-        window.open('https://artcraftsuite.org/app/wordcraft/', '_blank', 'noopener');
-        window.toast('Document .odt téléchargé — dans WordCraft : Fichier → Ouvrir, puis corrige et mets en page librement.', 'ok', 9000);
-      } catch (e) {
-        window.toast('Export .odt impossible : ' + (e && e.message ? e.message : e), 'err');
-      } finally {
-        btnWc.disabled = false; btnWc.classList.remove('loading');
-      }
+      await sendToWordcraft(item);
+      btnWc.disabled = false; btnWc.classList.remove('loading');
     });
 
     /* PDF « texte sélectionnable » : le scan tel quel + calque de texte invisible.
