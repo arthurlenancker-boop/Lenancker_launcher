@@ -2368,6 +2368,32 @@
       }
     });
 
+    /* WordCraft : quand le launcher a écrit un document (OCR fidèle ou recréé
+       par l'IA), il a besoin d'un traitement de texte pour continuer —
+       rédiger, corriger, mettre en page. On télécharge le .odt (même export
+       que le bouton .odt) puis on ouvre le build web officiel de WordCraft
+       (open source, tourne entièrement dans le navigateur) : Fichier →
+       Ouvrir, et le fichier ne quitte jamais la machine. La correction IA,
+       elle, se fait ici avec la clé Mistral (mode « Recréé par IA »,
+       bouton « Nettoyer »). */
+    const btnWc = document.createElement('button');
+    btnWc.type = 'button'; btnWc.className = 'btn btn-ghost btn-sm'; btnWc.textContent = 'WordCraft';
+    btnWc.title = 'Télécharger le document en .odt et l\u2019ouvrir dans WordCraft — traitement de texte complet dans le navigateur (ruban, styles, tableaux, suivi des modifications) ; le fichier ne quitte pas ta machine';
+    btnWc.addEventListener('click', async () => {
+      btnWc.disabled = true; btnWc.classList.add('loading');
+      try {
+        await ensureOdt();
+        const blob = await window.Md2Odt.mdToOdtBlob(current, item.file.name, item.images);
+        downloadBlob(`${base}${item.recreated ? '' : '.ocr'}.odt`, blob);
+        window.open('https://artcraftsuite.org/app/wordcraft/', '_blank', 'noopener');
+        window.toast('Document .odt téléchargé — dans WordCraft : Fichier → Ouvrir, puis corrige et mets en page librement.', 'ok', 9000);
+      } catch (e) {
+        window.toast('Export .odt impossible : ' + (e && e.message ? e.message : e), 'err');
+      } finally {
+        btnWc.disabled = false; btnWc.classList.remove('loading');
+      }
+    });
+
     /* PDF « texte sélectionnable » : le scan tel quel + calque de texte invisible.
        Document recréé par l'IA : pas de blocs OCR — la feuille seule, sans calque. */
     const btnPdf = document.createElement('button');
@@ -2400,7 +2426,7 @@
     if (scoreSpan) head.append(scoreSpan);
     if (box) head.append(box);
     if (annotSpan) head.append(annotSpan);
-    head.append(seg, btnCopy, btnHtml, btnDl, btnDoc);
+    head.append(seg, btnCopy, btnHtml, btnDl, btnDoc, btnWc);
     if (item.kind === 'image') head.append(btnPdf);
     /* Document recréé : le PDF qui va au bout de la chaîne à l'envers —
        texte recréé + figures, composés en A4 à l'impression. */

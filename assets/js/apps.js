@@ -41,4 +41,19 @@ window.LENANCKER_APPS = [
     status: 'disponible',
     href: 'apps/probabilites/index.html',
   },
+  {
+    /* App externe : le launcher ouvre le build web officiel de WordCraft
+       (traitement de texte open source en Rust, MIT/Apache-2.0) dans un
+       nouvel onglet — `external: true` fait que launcher.js ajoute
+       target="_blank" pour ne pas quitter la PWA installée. */
+    slug: 'wordcraft',
+    name: 'WordCraft',
+    desc: "Traitement de texte complet, gratuit et open source, qui tourne entièrement dans le navigateur : ruban, styles, tableaux, suivi des modifications, sommaires et citations, export PDF. À utiliser quand le launcher a écrit un document : la rédaction et la correction IA se font dans l'app OCR avec ta clé Mistral (mode « Recréé par IA », bouton « Nettoyer »), puis le .odt ou .md téléchargé s'ouvre ici (Fichier → Ouvrir) pour l'édition fine — orthographe et grammaire pendant la frappe, styles et mise en page, export .docx ou PDF. Le document ne quitte jamais la machine : tout tourne en local.",
+    icon: 'doc',
+    tint: 'rgba(177, 140, 255, 0.12)',
+    accent: '#b18cff',
+    status: 'disponible',
+    href: 'https://artcraftsuite.org/app/wordcraft/',
+    external: true,
+  },
 ];

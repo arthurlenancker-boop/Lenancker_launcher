@@ -37,6 +37,12 @@
     if (!isSoon) {
       card.href = app.href;
       card.setAttribute('aria-label', `Ouvrir ${app.name}`);
+      /* App externe (ex. WordCraft) : nouvel onglet — la PWA installée
+         du launcher reste ouverte en arrière-plan. */
+      if (app.external) {
+        card.target = '_blank';
+        card.rel = 'noopener noreferrer';
+      }
     }
     card.className = `app-card reveal${isSoon ? ' soon' : ''}${featured ? ' featured' : ''}`;
     card.style.setProperty('--d', `${0.34 + i * 0.09}s`);
