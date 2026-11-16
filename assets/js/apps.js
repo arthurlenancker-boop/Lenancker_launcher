@@ -42,18 +42,19 @@ window.LENANCKER_APPS = [
     href: 'apps/probabilites/index.html',
   },
   {
-    /* App externe : le launcher ouvre le build web officiel de WordCraft
-       (traitement de texte open source en Rust, MIT/Apache-2.0) dans un
-       nouvel onglet — `external: true` fait que launcher.js ajoute
-       target="_blank" pour ne pas quitter la PWA installée. */
+    /* WordCraft, build web officiel auto-hébergé par le launcher
+       (apps/wordcraft/, intégré par le workflow de déploiement — version
+       épinglée, somme SHA256 vérifiée). Servi sur la même origine que le
+       site, il est pilotable par l'app OCR (protocole host) qui y construit
+       les documents recréés par l'IA ; une fois chargé, le service worker
+       le garde en cache pour un usage hors-ligne. */
     slug: 'wordcraft',
     name: 'WordCraft',
-    desc: "Traitement de texte complet, gratuit et open source, qui tourne entièrement dans le navigateur : ruban, styles, tableaux, suivi des modifications, sommaires et citations, export PDF. À utiliser quand le launcher a écrit un document : la rédaction et la correction IA se font dans l'app OCR avec ta clé Mistral (mode « Recréé par IA », bouton « Nettoyer »), puis le .odt ou .md téléchargé s'ouvre ici (Fichier → Ouvrir) pour l'édition fine — orthographe et grammaire pendant la frappe, styles et mise en page, export .docx ou PDF. Le document ne quitte jamais la machine : tout tourne en local.",
+    desc: "Traitement de texte complet, gratuit et open source, servi par le launcher lui-même (build web officiel, même origine) : ruban, styles, tableaux, suivi des modifications, sommaires et citations, export .docx/.odt/PDF. Quand l'app OCR écrit un document — reconstruction IA, OCR fidèle ou extraction directe — WordCraft le construit : l'éditeur embarqué de l'app l'ouvre, le monte dans son moteur et rend chaque sauvegarde à la page ; cette carte l'ouvre aussi à la main. Le document ne quitte jamais la machine : tout tourne en local.",
     icon: 'doc',
     tint: 'rgba(177, 140, 255, 0.12)',
     accent: '#b18cff',
     status: 'disponible',
-    href: 'https://artcraftsuite.org/app/wordcraft/',
-    external: true,
+    href: 'apps/wordcraft/',
   },
 ];

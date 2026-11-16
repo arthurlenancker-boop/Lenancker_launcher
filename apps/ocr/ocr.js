@@ -52,6 +52,8 @@
     modeOcr: $('mode-ocr'), modeIa: $('mode-ia'), modeHint: $('mode-hint'), pdfAll: $('pdf-all'),
     pageMarks: $('page-marks'),
     annotRow: $('annot-row'), annotPrefs: $('annot-prefs'),
+    wcOverlay: $('wc-overlay'), wcFrame: $('wc-frame'), wcClose: $('wc-close'),
+    wcStatus: $('wc-status'), wcDirty: $('wc-dirty'),
   };
   // Préférences persistées via la cascade de stockage (voir common.js) :
   // indisponible dans certains contextes, sans casser l'app.
@@ -310,12 +312,9 @@
   }
 
   /* ---------- WordCraft : suite naturelle quand le module a écrit un document ---------- */
-  const WORDCRAFT_URL = 'https://artcraftsuite.org/app/wordcraft/';
-  /* Télécharge le .odt (même export que le bouton .odt) puis ouvre le build
-     web officiel de WordCraft — traitement de texte open source qui tourne
-     entièrement dans le navigateur : Fichier → Ouvrir, et le document ne
-     quitte jamais la machine. Sert le bouton « WordCraft » de la carte
-     résultat et l'action du toast de fin d'analyse. */
+  const WORDCRAFT_URL = 'https://artcraftsuite.org/app/wordcraft/'; // repli distant
+  /* Repli (build local absent) : télécharge le .odt puis ouvre l'éditeur
+     distant — le document quitte la page, jamais la machine. */
   async function sendToWordcraft(item) {
     try {
       await ensureOdt();
@@ -328,6 +327,122 @@
       window.toast('Export .odt impossible : ' + (e && e.message ? e.message : e), 'err');
     }
   }
+
+  /* ---------- WordCraft embarqué : l'IA écrit, WordCraft construit ----------
+     Le workflow de déploiement sert le build web officiel sur la même
+     origine (apps/wordcraft/) ; le protocole host de WordCraft (contrat
+     craft-web-host) exige la même origine. L'app ouvre l'éditeur dans un
+     overlay, lui envoie le document (wordcraft:open, .docx natif —
+     titres, listes, tableaux, figures), WordCraft le construit dans son
+     moteur (styles, mise en page, pagination) et rend chaque sauvegarde à
+     la page (wordcraft:save → téléchargement). Tout reste local. */
+  const WC_APP = 'wordcraft';
+  const WC_PATH = '../wordcraft/';
+  const WC_AUTHOR = 'Arthur acno';
+  let wcAvailable = null; // null = inconnu, true/false sinon
+  let wcReady = false;    // l'éditeur embarqué tourne et écoute
+  let wcStarting = false; // chargement en cours (premier affichage)
+  let wcDirty = false;    // modifications non enregistrées signalées
+  let wcPending = null;   // document à ouvrir dès que l'éditeur est prêt
+
+  async function wordcraftLocalAvailable() {
+    if (wcAvailable !== null) return wcAvailable;
+    try {
+      const r = await fetch(WC_PATH, { method: 'HEAD' });
+      wcAvailable = !!r.ok;
+    } catch { wcAvailable = false; }
+    return wcAvailable;
+  }
+
+  /* Le document envoyé à WordCraft : .docx d'abord (format natif de
+     l'éditeur, mêmes titres/listes/tableaux/figures que l'export .docx),
+     .odt en repli si la conversion échoue. */
+  async function wordcraftBytes(item) {
+    const base = item.file.name.replace(/\.[^.]+$/, '');
+    try {
+      await ensureDocx();
+      const blob = await window.Md2Docx.mdToDocxBlob(item.markdown, item.file.name, item.images, item.imageDims);
+      return { name: `${base}${item.recreated ? '' : '.ocr'}.docx`, blob };
+    } catch {
+      await ensureOdt();
+      const blob = await window.Md2Odt.mdToOdtBlob(item.markdown, item.file.name, item.images);
+      return { name: `${base}${item.recreated ? '' : '.ocr'}.odt`, blob };
+    }
+  }
+
+  async function sendWordcraftDocument(item) {
+    if (!els.wcFrame || !els.wcFrame.contentWindow) return;
+    const { name, blob } = await wordcraftBytes(item);
+    const buf = await blob.arrayBuffer();
+    els.wcFrame.contentWindow.postMessage(
+      { type: `${WC_APP}:open`, name, bytes: buf },
+      window.location.origin,
+      [buf]
+    );
+    if (els.wcStatus) els.wcStatus.textContent = name;
+  }
+
+  async function openInWordcraft(item) {
+    if (!(await wordcraftLocalAvailable())) { await sendToWordcraft(item); return; }
+    if (wcDirty && !window.confirm('Le document ouvert dans WordCraft a des modifications non enregistrées — le remplacer ?')) return;
+    if (els.wcOverlay) els.wcOverlay.classList.remove('hidden');
+    if (wcReady) {
+      try { await sendWordcraftDocument(item); }
+      catch (e) { window.toast('Ouverture dans WordCraft impossible : ' + (e && e.message ? e.message : e), 'err'); }
+    } else {
+      wcPending = item;
+      if (!wcStarting) {
+        wcStarting = true;
+        if (els.wcStatus) els.wcStatus.textContent = 'chargement de l\u2019éditeur (première fois : ~60 Mo, ensuite gardé en cache)…';
+        els.wcFrame.src = `${WC_PATH}?host=parent&author=${encodeURIComponent(WC_AUTHOR)}`;
+      }
+    }
+  }
+
+  /* Messages de l'éditeur embarqué : origine et source vérifiées, comme le
+     fait le pont de WordCraft dans l'autre sens. */
+  window.addEventListener('message', (ev) => {
+    if (ev.origin !== window.location.origin) return;
+    if (!els.wcFrame || ev.source !== els.wcFrame.contentWindow) return;
+    const msg = ev.data || {};
+    const kind = String(msg.type || '');
+    if (kind === `${WC_APP}:ready`) {
+      wcReady = true; wcStarting = false;
+      /* Ce que l'hôte sait faire (contrat version 1). */
+      els.wcFrame.contentWindow.postMessage({ type: `${WC_APP}:host`, version: '1' }, window.location.origin);
+      if (els.wcStatus) els.wcStatus.textContent = 'éditeur prêt';
+      if (wcPending) {
+        const item = wcPending; wcPending = null;
+        sendWordcraftDocument(item).catch((e) => {
+          window.toast('Ouverture dans WordCraft impossible : ' + (e && e.message ? e.message : e), 'err');
+        });
+      }
+    } else if (kind === `${WC_APP}:save`) {
+      /* Chaque Save / Export de WordCraft devient un téléchargement. */
+      const name = msg.name || 'document';
+      downloadBlob(name, new Blob([msg.bytes], { type: 'application/octet-stream' }));
+      window.toast(`${name} enregistré${msg.saveAs ? '' : ' (Ctrl+S dans WordCraft fait de même)'}.`, 'ok', 6000);
+    } else if (kind === `${WC_APP}:dirty`) {
+      wcDirty = !!msg.dirty;
+      if (els.wcDirty) els.wcDirty.hidden = !wcDirty;
+    } else if (kind === `${WC_APP}:failed`) {
+      window.toast(`WordCraft embarqué n\u2019a pas pu démarrer (${msg.error || 'raison inconnue'}) — repli sur l\u2019éditeur distant au prochain essai.`, 'err', 9000);
+      if (els.wcStatus) els.wcStatus.textContent = 'éditeur indisponible';
+      wcAvailable = false;
+    }
+  });
+
+  function closeWordcraft() {
+    if (!els.wcOverlay || els.wcOverlay.classList.contains('hidden')) return;
+    if (wcDirty && !window.confirm('Le document a des modifications non enregistrées. Fermer l\u2019éditeur quand même ?')) return;
+    /* L'éditeur reste chargé (masqué) : le rouvrir est immédiat et le
+       cache SW dédié a déjà payé le téléchargement. */
+    els.wcOverlay.classList.add('hidden');
+  }
+  if (els.wcClose) els.wcClose.addEventListener('click', closeWordcraft);
+  window.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape' && els.wcOverlay && !els.wcOverlay.classList.contains('hidden')) closeWordcraft();
+  });
 
   let pdfLibPromise = null;
   function ensurePdfLib() {
@@ -2195,7 +2310,7 @@
             item.status = 'ok';
             window.toast(`Document reconstruit : ${item.file.name}`, 'ok', 3800, {
               label: 'WordCraft',
-              onClick: () => sendToWordcraft(item),
+              onClick: () => openInWordcraft(item),
             });
           } else {
             await callOcr(item, key, 1);
@@ -2204,12 +2319,12 @@
               // .docx/.pptx : documents numériques — rien à reconstruire, extraction directe
               window.toast(`${item.file.name} : document numérique — contenu extrait directement, sans reconstruction IA.`, 'info', 7000, {
                 label: 'WordCraft',
-                onClick: () => sendToWordcraft(item),
+                onClick: () => openInWordcraft(item),
               });
             } else {
               window.toast(`OCR terminé : ${item.file.name}`, 'ok', 3800, {
                 label: 'WordCraft',
-                onClick: () => sendToWordcraft(item),
+                onClick: () => openInWordcraft(item),
               });
             }
             if (Number.isFinite(item.confScore) && item.confScore !== null && item.confScore < 0.7) {
@@ -2398,15 +2513,17 @@
     });
 
     /* WordCraft : quand le module a écrit un document (OCR fidèle ou recréé
-       par l'IA), il a besoin d'un traitement de texte pour continuer —
-       rédiger, corriger, mettre en page. La correction IA, elle, se fait ici
-       avec la clé Mistral (mode « Recréé par IA », bouton « Nettoyer »). */
+       par l'IA), c'est WordCraft qui le construit — l'éditeur embarqué
+       (build officiel auto-hébergé, même origine) reçoit le document et le
+       monte dans son moteur : styles, mise en page, pagination. La
+       correction IA, elle, se fait ici avec la clé Mistral (mode « Recréé
+       par IA », bouton « Nettoyer »). */
     const btnWc = document.createElement('button');
     btnWc.type = 'button'; btnWc.className = 'btn btn-ghost btn-sm'; btnWc.textContent = 'WordCraft';
-    btnWc.title = 'Télécharger le document en .odt et l\u2019ouvrir dans WordCraft — traitement de texte complet dans le navigateur (ruban, styles, tableaux, suivi des modifications) ; le fichier ne quitte pas ta machine';
+    btnWc.title = 'Construire et éditer le document dans WordCraft — l\u2019éditeur embarqué (officiel, local) ouvre la reconstruction : styles, tableaux, suivi des modifications, export .docx/.odt/PDF ; garde la main pour la correction';
     btnWc.addEventListener('click', async () => {
       btnWc.disabled = true; btnWc.classList.add('loading');
-      await sendToWordcraft(item);
+      await openInWordcraft(item);
       btnWc.disabled = false; btnWc.classList.remove('loading');
     });
 

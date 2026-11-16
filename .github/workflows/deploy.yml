@@ -29,6 +29,31 @@ jobs:
           mkdir -p site
           cp -r index.html manifest.webmanifest sw.js assets apps docs site/
 
+      # Build web officiel de WordCraft, servi sur la même origine que le
+      # launcher : le protocole host (wordcraft:open / :save) exige la même
+      # origine, et l'app OCR y construit les documents recréés par l'IA.
+      # Version épinglée + somme SHA256 vérifiée ; en cas d'échec le site se
+      # déploie quand même et l'app OCR retombe sur l'éditeur distant.
+      - name: Intégrer le build web WordCraft (apps/wordcraft/)
+        continue-on-error: true
+        run: |
+          set -eu
+          WC_VER="0.18.1"
+          WC_URL="https://github.com/storytold/wordcraft/releases/download/v${WC_VER}"
+          curl -fsSL "${WC_URL}/wordcraft-web-${WC_VER}.zip" -o /tmp/wordcraft-web.zip
+          curl -fsSL "${WC_URL}/SHA256SUMS.txt" -o /tmp/SHA256SUMS.txt
+          EXPECTED=$(grep "wordcraft-web-${WC_VER}.zip$" /tmp/SHA256SUMS.txt | awk '{print $1}')
+          if [ -z "$EXPECTED" ]; then
+            echo "Somme SHA256 introuvable pour wordcraft-web-${WC_VER}.zip" >&2
+            exit 1
+          fi
+          echo "${EXPECTED}  /tmp/wordcraft-web.zip" | sha256sum -c -
+          mkdir -p /tmp/wordcraft-web site/apps/wordcraft
+          unzip -q /tmp/wordcraft-web.zip -d /tmp/wordcraft-web
+          mv /tmp/wordcraft-web/wordcraft-web-${WC_VER}/* site/apps/wordcraft/
+          test -f site/apps/wordcraft/index.html
+          echo "WordCraft ${WC_VER} intégré : $(du -sh site/apps/wordcraft | cut -f1)"
+
       - name: Configurer Pages
         uses: actions/configure-pages@v5
 
