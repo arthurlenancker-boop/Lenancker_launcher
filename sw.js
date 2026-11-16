@@ -1,7 +1,7 @@
 /* Service worker du Lenancker Launcher.
    Stratégie : cache-first pour les assets statiques (le launcher doit
    rester utilisable hors-ligne), réseau direct pour l'API Mistral. */
-const VERSION = 'lenancker-v30';
+const VERSION = 'lenancker-v31';
 /* Cache pérenne de l'éditeur WordCraft embarqué (apps/wordcraft/) :
    vécu à travers les bumps de VERSION, pour ne pas re-télécharger ~60 Mo. */
 const WC_CACHE = 'lenancker-wordcraft';

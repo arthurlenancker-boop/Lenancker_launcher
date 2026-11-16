@@ -160,6 +160,49 @@
     }, ms);
   };
 
+  /* --- Lueur du curseur : halo doux qui suit le pointeur et s'allume
+         quand il survole un élément interactif (lien, bouton, carte…).
+         Desktop uniquement : pointeur fin capable de survol. Sur une carte
+         d'app, la lueur prend la couleur propre de l'application. --- */
+  if (window.matchMedia('(hover: hover) and (pointer: fine)').matches &&
+      !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const glow = document.createElement('div');
+    glow.className = 'cursor-glow';
+    glow.setAttribute('aria-hidden', 'true');
+    const core = document.createElement('div');
+    core.className = 'cursor-glow-core';
+    glow.appendChild(core);
+    document.body.appendChild(glow);
+
+    /* Sélecteurs considérés comme interactifs : la lueur s'allume dessus. */
+    const INTERACTIVE = 'a[href], button:not(:disabled), [role="button"], .btn, .app-card:not(.soon), input:not([type="hidden"]), textarea, select, label, summary';
+    let raf = null, px = 0, py = 0;
+    const place = () => {
+      raf = null;
+      /* Le conteneur porte la position (au plus près du pointeur), le cœur
+         porte l'apparition : les transitions CSS restent fluides. */
+      glow.style.transform = `translate3d(${px}px, ${py}px, 0)`;
+    };
+    window.addEventListener('pointermove', (e) => {
+      px = e.clientX; py = e.clientY;
+      if (!raf) raf = window.requestAnimationFrame(place);
+      const t = e.target instanceof Element ? e.target.closest(INTERACTIVE) : null;
+      core.classList.toggle('on', !!t);
+      const card = t ? t.closest('.app-card') : null;
+      if (card) {
+        const c = getComputedStyle(card).getPropertyValue('--app-accent').trim();
+        if (c) core.style.setProperty('--glow-accent', c);
+      } else {
+        core.style.removeProperty('--glow-accent');
+      }
+    }, { passive: true });
+    /* Le pointeur quitte la fenêtre : on éteint la lueur. */
+    document.documentElement.addEventListener('pointerleave', () => core.classList.remove('on'));
+    /* Pression : la lueur se resserre, retour visuel du clic. */
+    window.addEventListener('pointerdown', () => core.classList.add('press'), { passive: true });
+    window.addEventListener('pointerup', () => core.classList.remove('press'), { passive: true });
+  }
+
   /* --- Service worker (PWA) : chemin résolu depuis le script lui-même,
          pour fonctionner aussi depuis apps/<slug>/ --- */
   if ('serviceWorker' in navigator) {
