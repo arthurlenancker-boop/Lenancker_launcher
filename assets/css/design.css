@@ -163,7 +163,7 @@ img { max-width: 100%; }
     color-mix(in srgb, var(--app-accent, var(--accent)) 6%, transparent) 40%,
     transparent 70%);
   opacity: 0;
-  transition: opacity 0.35s ease;
+  transition: opacity 0.18s ease-out;
   z-index: 1;
 }
 /* Le liseré exclut les boutons en chargement : leur ::before est
@@ -183,7 +183,7 @@ img { max-width: 100%; }
   mask-composite: exclude;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.35s ease;
+  transition: opacity 0.18s ease-out;
   z-index: 2;
 }
 :is(.app-card:not(.soon), .btn, .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn, .chk, .rd, .dlg-remember, .toast-action):hover::after,

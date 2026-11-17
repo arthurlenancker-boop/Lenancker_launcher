@@ -174,7 +174,7 @@
     const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)');
     let el = null, raf = null;
     let tx = 0, ty = 0, cx = 0, cy = 0;
-    const EASE = 0.16;
+    const EASE = 0.30;
     function place(x, y) {
       el.style.setProperty('--mx', `${x.toFixed(2)}px`);
       el.style.setProperty('--my', `${y.toFixed(2)}px`);
