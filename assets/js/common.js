@@ -367,7 +367,16 @@
       const pill = seg.querySelector(':scope > .seg-pill');
       if (!pill) return;
       const active = seg.querySelector('button.active, .segbtn.on');
-      if (!active || !seg.offsetParent) { pill.classList.remove('placed'); return; }
+      /* Ne retirer « placed » que si elle est vraiment presente : une
+         ecriture identique de l attribut class emet malgre tout un
+         enregistrement de MutationObserver dans Electron (Chromium 130),
+         ce qui entretient une boucle synchrone place() -> observateur ->
+         place() et fige le rendu de la page tant qu un segment est
+         masque (ex. minuteur de recompense). Garde identique sur add(). */
+      if (!active || !seg.offsetParent) {
+        if (pill.classList.contains('placed')) pill.classList.remove('placed');
+        return;
+      }
       const left = active.offsetLeft - seg.clientLeft;
       const width = active.offsetWidth;
       if (pill.classList.contains('placed')) {
@@ -381,7 +390,7 @@
       pill.style.width = `${width}px`;
       requestAnimationFrame(() => {
         pill.style.transition = '';
-        pill.classList.add('placed');
+        if (!pill.classList.contains('placed')) pill.classList.add('placed');
       });
     }
 
