@@ -52,7 +52,17 @@ jobs:
 
       - name: Installer les dépendances
         working-directory: electron
-        run: npm ci
+        shell: pwsh
+        run: |
+          $log = npm ci --foreground-scripts 2>&1
+          $code = $LASTEXITCODE
+          $log | ForEach-Object { Write-Host "$_" }
+          if ($code -ne 0) {
+            $tail = ($log | Select-Object -Last 30) -join ' | '
+            if ($tail.Length -gt 900) { $tail = $tail.Substring($tail.Length - 900) }
+            Write-Host "::error::npm ci a echoue (exit $code) : $tail"
+            exit $code
+          }
 
       - name: Construire l'installateur NSIS et le portable
         working-directory: electron
