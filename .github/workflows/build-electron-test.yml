@@ -1,0 +1,87 @@
+# Variante de test du workflow de la PR #9 (build-electron.yml) : au lieu de
+# se déclencher sur un tag v*, il se déclenche au push de cette branche et
+# publie les .exe dans une Release de test (préversion), pour valider la
+# chaîne de compilation cloud et fournir un exécutable téléchargeable sans
+# attendre la fusion. Supprimable à tout moment (Release + branche).
+name: Build de test .exe (branche vibe)
+
+on:
+  push:
+    branches: ['vibe/exe-build-test-6c2f8a']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Installer Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Build web officiel de WordCraft, embarqué dans le .exe comme il l'est
+      # sur le site Pages (le protocole host exige la même origine). Version
+      # épinglée + somme SHA256 vérifiée ; en cas d'échec l'app se construit
+      # quand même et l'app OCR retombe sur l'éditeur distant.
+      - name: Intégrer le build web WordCraft (apps/wordcraft/)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ver = '0.18.1'
+          $rel = "https://github.com/storytold/wordcraft/releases/download/v$ver"
+          $zip = Join-Path $env:TEMP 'wordcraft-web.zip'
+          Invoke-WebRequest "${rel}/wordcraft-web-${ver}.zip" -OutFile $zip
+          Invoke-WebRequest "${rel}/SHA256SUMS.txt" -OutFile "$env:TEMP\SHA256SUMS.txt"
+          $expected = ((Select-String -Path "$env:TEMP\SHA256SUMS.txt" -Pattern "wordcraft-web-$ver\.zip$").Line -split '\s+')[0]
+          if (-not $expected) { throw "SHA256 introuvable pour wordcraft-web-$ver.zip" }
+          $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $expected.ToLower()) { throw "SHA256 invalide : $actual != $expected" }
+          $tmp = Join-Path $env:TEMP 'wordcraft-web'
+          Expand-Archive $zip -DestinationPath $tmp -Force
+          New-Item -ItemType Directory -Force apps/wordcraft | Out-Null
+          Copy-Item (Join-Path $tmp "wordcraft-web-$ver\*") apps/wordcraft/ -Recurse -Force
+          if (-not (Test-Path 'apps/wordcraft/index.html')) { throw 'index.html manquant' }
+          Write-Host "WordCraft $ver intégré"
+
+      - name: Installer les dépendances
+        working-directory: electron
+        run: npm ci
+
+      - name: Construire l'installateur NSIS et le portable
+        working-directory: electron
+        run: npm run dist:win
+
+      - name: Publier les .exe en artefacts du run
+        uses: actions/upload-artifact@v4
+        with:
+          name: lenancker-launcher-win-x64
+          path: dist/*.exe
+          if-no-files-found: error
+
+      - name: Créer la Release de test avec les .exe
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: exe-test-2026-11-17
+          name: Exe de test (compilation cloud)
+          prerelease: true
+          generate_release_notes: false
+          body: |
+            Compilation de test générée automatiquement par GitHub Actions
+            depuis la branche `vibe/exe-build-test-6c2f8a`.
+
+            Contenu : code de `main` + les changements de couleur de la
+            PR #10 (chaque app adopte la couleur de sa carte d'accueil).
+
+            - Installateur NSIS et version portable, non signés : au premier
+              lancement, Windows SmartScreen peut demander
+              « Informations complémentaires → Exécuter quand même ».
+            - Cette Release est un test supprimable sans risque ; la chaîne
+              officielle est décrite dans la PR #9 (Release sur les tags v*).
+          files: dist/*.exe
