@@ -7,8 +7,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist:win": "electron-builder --win --x64",
-    "dist:win:portable": "electron-builder --win portable --x64"
+    "dist:win": "electron-builder --win --x64 --publish never",
+    "dist:win:portable": "electron-builder --win portable --x64 --publish never"
   },
   "devDependencies": {
     "electron": "^33.2.0",
@@ -52,6 +52,11 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Lenancker Launcher"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "arthurlenancker-boop",
+      "repo": "Lenancker_launcher"
     }
   },
   "dependencies": {
