@@ -1,5 +1,12 @@
 /* Révision — styles spécifiques (complètent design.css) */
 
+/* Couleur de l'app : celle de sa carte sur l'écran d'accueil (apps.js).
+   Les teintes dérivées suivent --accent via color-mix. Le bouton
+   « Facile » garde sa couleur propre (--grade-easy) : les quatre
+   évaluations (À revoir / Difficile / Moyen / Facile) restent
+   distinctes quand l'accent change. */
+:root { --accent: #7bc47f; --grade-easy: #ff5310; }
+
 .panel { padding: clamp(1.2rem, 3vw, 1.7rem); margin-bottom: 1.4rem; }
 .panel-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -56,7 +63,7 @@
   padding: 0.25rem 0.4rem; border-radius: 6px; font-size: 0.9rem;
   transition: color 0.2s, background 0.2s;
 }
-.card-row .cactions button:hover { color: var(--accent); background: rgba(255, 83, 16, 0.12); }
+.card-row .cactions button:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .card-row .cactions button.danger:hover { color: var(--err); background: rgba(229, 96, 79, 0.15); }
 .card-row .cmaturity { grid-column: 1 / -1; font-size: 0.7rem; color: var(--ink-faint); }
 @media (max-width: 640px) { .card-row { grid-template-columns: 1fr; } }
@@ -116,8 +123,8 @@
 .grade-hard:hover { border-color: var(--warn); background: rgba(232, 179, 75, 0.12); }
 .grade-good { border-color: rgba(123, 196, 127, 0.55); }
 .grade-good:hover { border-color: var(--ok); background: rgba(123, 196, 127, 0.12); }
-.grade-easy { border-color: rgba(255, 83, 16, 0.55); }
-.grade-easy:hover { border-color: var(--accent); background: rgba(255, 83, 16, 0.12); }
+.grade-easy { border-color: color-mix(in srgb, var(--grade-easy) 55%, transparent); }
+.grade-easy:hover { border-color: var(--grade-easy); background: color-mix(in srgb, var(--grade-easy) 12%, transparent); }
 
 #session-done .done-title {
   color: var(--ok); font-size: 1.3rem; margin: 0 0 0.6rem;
@@ -142,7 +149,7 @@
 }
 .week-day .small { color: var(--ink-faint); }
 .week-day.today .week-bar {
-  background: linear-gradient(180deg, rgba(255, 83, 16, 0.9), rgba(255, 83, 16, 0.4));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 90%, transparent), color-mix(in srgb, var(--accent) 40%, transparent));
 }
 
 /* ==================== Verbes irréguliers — Boîte de Leitner ==================== */
