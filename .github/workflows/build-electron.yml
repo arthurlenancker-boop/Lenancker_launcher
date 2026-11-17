@@ -46,9 +46,14 @@ jobs:
           if (-not (Test-Path 'apps/wordcraft/index.html')) { throw 'index.html manquant' }
           Write-Host "WordCraft $ver intégré"
 
+      # npm install et non npm ci : le package-lock.json du dépôt a été
+      # généré hors Windows et omet des paquets optionnels win32 (ex.
+      # electron-builder-squirrel-windows), ce que npm ci refuse sur un
+      # runner Windows (« Missing ... from lock file »). npm install
+      # complète l'arborescence sur place ; le build est identique.
       - name: Installer les dépendances
         working-directory: electron
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       # Sur un tag v1.0.1, l'exécutable porte cette version (au lieu du 1.0.0
       # figé dans electron/package.json).
