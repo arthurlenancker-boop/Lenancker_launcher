@@ -126,41 +126,31 @@ img { max-width: 100%; }
   position: absolute; inset: 0; opacity: 0.05; pointer-events: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
 }
-/* --- Lueur du curseur : halo autour du pointeur sur les éléments
-       interactifs. Le JS place le conteneur sous le pointeur ; le cœur
-       porte l'apparition (opacité, grossissement à ressort). --- */
-.cursor-glow {
-  position: fixed;
-  top: 0; left: 0;
-  width: 0; height: 0;
-  pointer-events: none;
-  z-index: 90;
-}
-.cursor-glow-core {
+/* --- Reflet du pointeur : la surface s'illumine à l'endroit exact où
+       la souris se trouve. Le JS met à jour --mx / --my sur l'élément
+       survolé ; ce dégradé radial suit le pointeur et s'efface en douceur
+       au départ. --- */
+.app-card:not(.soon)::after,
+.btn::after {
+  content: '';
   position: absolute;
-  top: -70px; left: -70px;
-  width: 140px; height: 140px;
-  border-radius: 50%;
-  background: radial-gradient(circle,
-    color-mix(in srgb, var(--glow-accent, #ffcf9e) 30%, transparent) 0%,
-    color-mix(in srgb, var(--glow-accent, #ffcf9e) 9%, transparent) 42%,
-    transparent 68%);
-  filter: blur(3px);
-  mix-blend-mode: screen;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(220px circle at var(--mx, 50%) var(--my, 50%),
+    color-mix(in srgb, var(--app-accent, var(--accent)) 14%, transparent),
+    transparent 65%);
   opacity: 0;
-  transform: scale(0.4);
-  transition: opacity 0.25s ease, transform 0.35s var(--ease-spring);
-  will-change: transform, opacity;
+  transition: opacity 0.35s ease;
+  z-index: 1;
 }
-.cursor-glow-core.on { opacity: 1; transform: scale(1); }
-/* La lueur se resserre pendant le clic. */
-.cursor-glow-core.press { transform: scale(0.72); }
+.app-card:not(.soon):hover::after,
+.btn:hover::after { opacity: 1; }
 
 @media (prefers-reduced-motion: reduce) {
   .bg-glow { animation: none; }
   .reveal { opacity: 1 !important; transform: none !important; filter: none !important; animation: none !important; }
   .badge::before, .app-card.soon .app-icon { animation: none !important; }
-  .cursor-glow { display: none; }
   * { transition-duration: 0.01ms !important; }
 }
 
@@ -355,6 +345,7 @@ img { max-width: 100%; }
   padding: 0.62rem 1.15rem; border-radius: 999px;
   font-size: 0.9rem; font-weight: 600; letter-spacing: 0.01em;
   cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;
+  position: relative; overflow: hidden;
   transition: transform 0.4s var(--ease-spring), box-shadow 0.25s, background 0.25s, border-color 0.25s, opacity 0.2s, color 0.25s;
   user-select: none;
 }
