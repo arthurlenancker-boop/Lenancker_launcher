@@ -129,15 +129,29 @@ img { max-width: 100%; }
 /* --- Reflet du pointeur : la surface s'illumine à l'endroit exact où
        la souris se trouve. Le JS met à jour --mx / --my sur l'élément
        survolé ; ce dégradé radial suit le pointeur et s'efface en douceur
-       au départ. --- */
+       au départ. Sélecteurs par page :
+       - accueil : .app-card, .btn (toutes les pages) ;
+       - OCR : .dropzone (dépôt de fichiers), .dlg-opt (options du
+         dialogue), .seg button (segmenté) ;
+       - Focus : .seg button (segmenté) ;
+       - Révision : .deck-row (paquets), .vboite (boîtes de Leitner),
+         .memo-card (carte à retourner) ;
+       - Probabilités : .segbtn (segmenté). --- */
 .app-card:not(.soon)::after,
-.btn::after {
+.btn::after,
+.dropzone::after,
+.dlg-opt::after,
+.deck-row::after,
+.vboite::after,
+.memo-card::after,
+.seg button::after,
+.segbtn::after {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  background: radial-gradient(220px circle at var(--mx, 50%) var(--my, 50%),
+  background: radial-gradient(circle var(--spot-r, 220px) at var(--mx, 50%) var(--my, 50%),
     color-mix(in srgb, var(--app-accent, var(--accent)) 14%, transparent),
     transparent 65%);
   opacity: 0;
@@ -145,7 +159,23 @@ img { max-width: 100%; }
   z-index: 1;
 }
 .app-card:not(.soon):hover::after,
-.btn:hover::after { opacity: 1; }
+.btn:hover::after,
+.dropzone:hover::after,
+.dlg-opt:hover::after,
+.deck-row:hover::after,
+.vboite:hover::after,
+.memo-card:hover::after,
+.seg button:hover::after,
+.segbtn:hover::after { opacity: 1; }
+/* Ancrage du pseudo-élément sur les surfaces ajoutées (positionnement
+   et rognage aux coins arrondis), et rayon du reflet adapté à la
+   taille de chaque élément. */
+.dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn {
+  position: relative;
+  overflow: hidden;
+}
+.vboite::after { --spot-r: 140px; }
+.seg button::after, .segbtn::after { --spot-r: 90px; }
 
 @media (prefers-reduced-motion: reduce) {
   .bg-glow { animation: none; }

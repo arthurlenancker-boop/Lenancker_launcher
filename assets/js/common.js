@@ -166,7 +166,7 @@
          radial et son apparition vivent dans design.css (::after).
          Desktop uniquement : pointeur fin capable de survol. --- */
   if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
-    const SPOT = '.app-card:not(.soon), .btn';
+    const SPOT = '.app-card:not(.soon), .btn, .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn';
     document.addEventListener('pointermove', (e) => {
       const el = e.target instanceof Element ? e.target.closest(SPOT) : null;
       if (!el) return;
