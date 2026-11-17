@@ -77,7 +77,7 @@ jobs:
       # ressources embarquees, on capture la console JS des pages dans le
       # vrai environnement (exe de win-unpacked, protocole app://), et on
       # publie resources/app en zip pour inspection hors ligne.
-      - name: Diagnostic : ressources embarquees
+      - name: Diagnostic ressources embarquees
         shell: pwsh
         run: |
           $app = 'dist/win-unpacked/resources/app'
@@ -99,7 +99,7 @@ jobs:
           }
           Compress-Archive -Path "$app/*" -DestinationPath dist/resources-app.zip -Force
 
-      - name: Diagnostic : console de la page d'accueil
+      - name: Diagnostic console page accueil
         shell: pwsh
         run: |
           $env:LENANCKER_URL = 'app://local/index.html'
@@ -112,7 +112,7 @@ jobs:
           if ($lines) { Write-Host "::error::Console accueil : $lines" }
           else { Write-Host "::error::Console accueil : aucun message capture (lancement a verifier)" }
 
-      - name: Diagnostic : console de la page Focus
+      - name: Diagnostic console page Focus
         shell: pwsh
         run: |
           $env:LENANCKER_URL = 'app://local/apps/focus/index.html'
