@@ -99,31 +99,35 @@ jobs:
           }
           Compress-Archive -Path "$app/*" -DestinationPath dist/resources-app.zip -Force
 
-      - name: Diagnostic console page accueil
+      - name: Diagnostic devtools page accueil
         shell: pwsh
         run: |
           $env:LENANCKER_URL = 'app://local/index.html'
-          $p = Start-Process -FilePath 'dist/win-unpacked/Lenancker Launcher.exe' -ArgumentList '--disable-gpu','--enable-logging=stderr' -RedirectStandardError err-home.log -RedirectStandardOutput out-home.log -PassThru
-          Start-Sleep -Seconds 12
+          $env:DIAG_OUT = 'diag-win-home'
+          $p = Start-Process -FilePath 'dist/win-unpacked/Lenancker Launcher.exe' -ArgumentList '--disable-gpu','--remote-debugging-port=9222' -PassThru
+          $out = node electron/diag.js 2>&1 | Out-String
+          Write-Host $out
           if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
-          $c = Get-Content err-home.log -Raw -ErrorAction SilentlyContinue
-          Write-Host $c
-          $lines = (($c -split "`n") | Where-Object { $_ -match 'CONSOLE' } | Select-Object -First 25) -join ' | '
-          if ($lines) { Write-Host "::error::Console accueil : $lines" }
-          else { Write-Host "::error::Console accueil : aucun message capture (lancement a verifier)" }
+          if (Test-Path 'diag-win-home.json') {
+            $j = Get-Content diag-win-home.json -Raw | ConvertFrom-Json
+            $ev = ($j.events | Select-Object -First 10) -join ' | '
+            Write-Host "::error::[WIN accueil] etat: $($j.state) ; problemes: $($j.problems -join ' ; ') ; evenements: $ev"
+          } else { Write-Host "::error::[WIN accueil] devtools sans resultat (exe sans doute non lance sur le runner)" }
 
-      - name: Diagnostic console page Focus
+      - name: Diagnostic devtools page Focus
         shell: pwsh
         run: |
           $env:LENANCKER_URL = 'app://local/apps/focus/index.html'
-          $p = Start-Process -FilePath 'dist/win-unpacked/Lenancker Launcher.exe' -ArgumentList '--disable-gpu','--enable-logging=stderr' -RedirectStandardError err-focus.log -RedirectStandardOutput out-focus.log -PassThru
-          Start-Sleep -Seconds 12
+          $env:DIAG_OUT = 'diag-win-focus'
+          $p = Start-Process -FilePath 'dist/win-unpacked/Lenancker Launcher.exe' -ArgumentList '--disable-gpu','--remote-debugging-port=9222' -PassThru
+          $out = node electron/diag.js 2>&1 | Out-String
+          Write-Host $out
           if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
-          $c = Get-Content err-focus.log -Raw -ErrorAction SilentlyContinue
-          Write-Host $c
-          $lines = (($c -split "`n") | Where-Object { $_ -match 'CONSOLE' } | Select-Object -First 25) -join ' | '
-          if ($lines) { Write-Host "::error::Console Focus : $lines" }
-          else { Write-Host "::error::Console Focus : aucun message capture (lancement a verifier)" }
+          if (Test-Path 'diag-win-focus.json') {
+            $j = Get-Content diag-win-focus.json -Raw | ConvertFrom-Json
+            $ev = ($j.events | Select-Object -First 10) -join ' | '
+            Write-Host "::error::[WIN focus] etat: $($j.state) ; problemes: $($j.problems -join ' ; ') ; evenements: $ev"
+          } else { Write-Host "::error::[WIN focus] devtools sans resultat (exe sans doute non lance sur le runner)" }
 
       - name: Aligner les noms des .exe sur latest.yml
         shell: pwsh
@@ -170,3 +174,69 @@ jobs:
             dist/*.exe.blockmap
             dist/latest.yml
             dist/resources-app.zip
+            diag-win-home.json
+            diag-win-home.png
+            diag-win-focus.json
+            diag-win-focus.png
+
+  diag-linux:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Installer Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Xvfb
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb
+
+      - name: Installer les dependances electron
+        working-directory: electron
+        run: npm install --no-audit --no-fund
+
+      - name: Diagnostic devtools accueil
+        working-directory: electron
+        shell: bash
+        run: |
+          LENANCKER_URL='app://local/index.html' xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
+          sleep 3
+          DIAG_OUT=diag-linux-home node diag.js > diag-linux-home.log 2>&1 || true
+          cat diag-linux-home.log
+          pkill -f electron || true
+          if [ -f diag-linux-home.json ]; then
+            echo "::error::[LINUX accueil] $(head -c 900 diag-linux-home.json)"
+          else
+            echo "::error::[LINUX accueil] aucun resultat"
+          fi
+
+      - name: Diagnostic devtools Focus
+        working-directory: electron
+        shell: bash
+        run: |
+          LENANCKER_URL='app://local/apps/focus/index.html' xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
+          sleep 3
+          DIAG_OUT=diag-linux-focus node diag.js > diag-linux-focus.log 2>&1 || true
+          cat diag-linux-focus.log
+          pkill -f electron || true
+          if [ -f diag-linux-focus.json ]; then
+            echo "::error::[LINUX focus] $(head -c 900 diag-linux-focus.json)"
+          else
+            echo "::error::[LINUX focus] aucun resultat"
+          fi
+
+      - name: Attacher les resultats a la Release de test
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: exe-test-2026-11-17-v2
+          files: |
+            electron/diag-linux-home.json
+            electron/diag-linux-home.png
+            electron/diag-linux-focus.json
+            electron/diag-linux-focus.png
