@@ -58,9 +58,9 @@ jobs:
           $code = $LASTEXITCODE
           $log | ForEach-Object { Write-Host "$_" }
           if ($code -ne 0) {
-            $tail = ($log | Select-Object -Last 30) -join ' | '
-            if ($tail.Length -gt 900) { $tail = $tail.Substring($tail.Length - 900) }
-            Write-Host "::error::npm ci a echoue (exit $code) : $tail"
+            $errs = ($log | Where-Object { $_ -match '^npm error' -and $_ -notmatch 'Usage|Options|\[--|\[-w|aliases|Run "npm help' } | Select-Object -First 20) -join ' | '
+            if ($errs.Length -gt 900) { $errs = $errs.Substring(0, 900) }
+            Write-Host "::error::npm ci a echoue (exit $code) : $errs"
             exit $code
           }
 
