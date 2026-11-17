@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Lenancker Launcher — Synchronisation</title>
+<meta name="description" content="Connexion au serveur de synchronisation privé du Lenancker Launcher (PocketBase + Tailscale). Le mot de passe n'est jamais stocké."/>
+<meta name="robots" content="noindex"/>
+<meta name="theme-color" content="#0f0e0b"/>
+<link rel="icon" href="assets/icons/favicon.svg" type="image/svg+xml"/>
+<link rel="apple-touch-icon" href="assets/icons/icon-192.png"/>
+<link rel="manifest" href="manifest.webmanifest"/>
+<style>
+/* Page de connexion à la synchronisation — la grille des apps reste
+   la page d'accueil (index.html). Maquette galaxie validée, adaptée :
+   thème sombre seul, HUD en bas du hero, carte de connexion au centre. */
+@font-face{font-family:'Inter';font-style:normal;font-weight:400;font-display:swap;src:url('assets/fonts/inter-400.woff2') format('woff2')}
+@font-face{font-family:'Inter';font-style:normal;font-weight:500;font-display:swap;src:url('assets/fonts/inter-500.woff2') format('woff2')}
+@font-face{font-family:'Inter';font-style:normal;font-weight:600;font-display:swap;src:url('assets/fonts/inter-600.woff2') format('woff2')}
+@font-face{font-family:'Inter';font-style:normal;font-weight:700;font-display:swap;src:url('assets/fonts/inter-700.woff2') format('woff2')}
+@font-face{font-family:'Inter';font-style:normal;font-weight:800;font-display:swap;src:url('assets/fonts/inter-800.woff2') format('woff2')}
+:root{
+  --font-display:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-body:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --bg:#0f0e0b; --bg-raised:#14120e; --bg-sunken:#0a0907;
+  --ink:#f2efe7; --ink-strong:#fff; --muted:rgba(242,239,231,.6); --faint:rgba(242,239,231,.38);
+  --line:rgba(242,239,231,.16); --line-strong:rgba(242,239,231,.4);
+  --accent:#ff5310; --accent-ink:#ff8a54; --invert-bg:#f2efe7; --invert-fg:#0f0e0b;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;margin:0;padding:0;border:0 solid}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:1rem;line-height:1.5;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+img{display:block}
+.hud-label{font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase}
+.wrap{max-width:1280px;margin:0 auto}
+@media (min-width:768px){.wrap{border-left:1px solid var(--line);border-right:1px solid var(--line)}}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+/* nav */
+nav.site{position:fixed;top:0;left:0;right:0;z-index:50;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.site .bar{display:flex;align-items:center;justify-content:space-between;height:3rem;padding:0 1rem}
+.site .links{display:flex;align-items:stretch;gap:.25rem}
+.site .links a,.site .links button{font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);padding:.6rem .6rem;background:none;cursor:pointer;display:flex;align-items:center;gap:.35rem}
+.site .links a:hover,.site .links button:hover{color:var(--ink)}
+.brand{display:flex;align-items:center;gap:.5rem;font-family:var(--font-display);font-weight:700;letter-spacing:.02em}
+.brand svg{width:14px;height:14px}
+
+/* hero */
+#hero{position:relative}
+#hero .stage{position:relative;display:flex;min-height:calc(100svh - 3rem);flex-direction:column}
+#galaxy{position:absolute;inset:0;width:100%;height:100%;display:block}
+#hero .center{pointer-events:none;position:relative;z-index:40;margin:0 auto;display:flex;width:100%;max-width:1280px;flex:1;flex-direction:column;align-items:center;justify-content:center;padding:9rem 1.5rem 2.5rem}
+#hero .center > div{position:relative;display:flex;width:100%;max-width:42rem;flex-direction:column;align-items:center;text-align:center}
+.halo{position:absolute;inset:-88px -128px;background:radial-gradient(closest-side,color-mix(in srgb,var(--bg) 78%,transparent),transparent);pointer-events:none}
+.wordwrap{pointer-events:none;position:relative;z-index:40;width:100%;container-type:inline-size}
+.wordblur{position:absolute;left:-6%;right:-6%;top:-34%;bottom:-34%;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);mask-image:radial-gradient(closest-side,black 45%,transparent 100%);-webkit-mask-image:radial-gradient(closest-side,black 45%,transparent 100%)}
+.wordmark{position:relative;white-space:pre;color:var(--ink-strong);font-family:var(--font-display);font-weight:750;font-stretch:125%;font-size:17.8cqw;line-height:1}
+.wordmark .wm-letter{display:inline-block;text-align:center;will-change:transform,opacity;
+  text-shadow:0 0 .6vw color-mix(in srgb,var(--bg) 92%,transparent),0 .25vw 2.4vw color-mix(in srgb,var(--bg) 78%,transparent),0 .4vw 5vw color-mix(in srgb,var(--bg) 55%,transparent);
+  opacity:0;transform:translateY(.35em)}
+.wordmark .wm-letter.in{animation:wmIn .9s cubic-bezier(.2,.7,.2,1) forwards}
+@keyframes wmIn{from{opacity:0;transform:translateY(.35em);filter:blur(10px)}to{opacity:1;transform:translateY(0);filter:blur(0)}}
+/* HUD en bas du hero : nom de l'app survolée, sinon coordonnées polaires */
+#coordhud{position:absolute;bottom:1rem;left:50%;z-index:10;transform:translateX(-50%);background:var(--invert-bg);color:var(--invert-fg);padding:.25rem .4rem;font-weight:700;white-space:nowrap;opacity:0;transition:opacity .3s;pointer-events:none}
+#hero h1{position:relative;margin-top:2rem;font-family:var(--font-display);font-weight:500;font-size:1.875rem;line-height:1.05;letter-spacing:-.03em;color:var(--ink-strong)}
+@media (min-width:640px){#hero h1{font-size:2.25rem}}
+#hero .lede{position:relative;margin-top:1rem;max-width:28rem;font-size:1.125rem;line-height:1.7;color:var(--muted)}
+.cta-row{pointer-events:auto;position:relative;margin-top:1.5rem;display:flex;flex-direction:column;gap:.75rem;width:100%;max-width:24rem;align-items:center}
+@media (min-width:640px){.cta-row{flex-direction:row;max-width:none;justify-content:center}}
+.btn{display:inline-flex;width:-moz-fit-content;width:fit-content;align-items:center;justify-content:center;gap:.5rem;font-family:var(--font-mono);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.12em;white-space:nowrap;padding:0 1.5rem;height:3rem;transition:all .15s;cursor:pointer}
+.btn.ghost{border:1px solid var(--line-strong);background:var(--bg);color:var(--ink)}
+.btn.ghost:hover{border-color:transparent}
+.reveal{opacity:0;transform:translateY(18px);transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.2,1)}
+.reveal.seen{opacity:1;transform:none}
+
+/* synchronisation */
+.sync-dot{width:7px;height:7px;border-radius:999px;background:var(--faint);display:inline-block;transition:background .3s,box-shadow .3s}
+.sync-dot.ok{background:#7bc47f;box-shadow:0 0 8px rgba(123,196,127,.55)}
+.sync-dot.err{background:#ff6a54;box-shadow:0 0 8px rgba(255,106,84,.45)}
+.sync-dot.busy{background:var(--accent);box-shadow:0 0 8px rgba(255,83,16,.45)}
+.sync-card{pointer-events:auto;position:relative;margin-top:2rem;width:100%;max-width:24rem;background:color-mix(in srgb,var(--bg-raised) 88%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);box-shadow:0 18px 60px rgba(0,0,0,.32);padding:1.25rem;display:flex;flex-direction:column;gap:.65rem;text-align:left}
+.sync-card .panel-head{display:flex;align-items:center;justify-content:space-between;gap:1rem}
+.sync-lab{color:var(--faint);margin-top:.25rem}
+.sync-input{width:100%;background:var(--bg-sunken);border:1px solid var(--line);color:var(--ink);font-family:var(--font-body);font-size:.9rem;padding:.55rem .65rem;outline:none;transition:border-color .2s}
+.sync-input:focus{border-color:var(--line-strong)}
+.sync-passrow{display:flex;align-items:stretch;gap:.5rem}
+.sync-passrow .sync-input{flex:1;min-width:0}
+#syncEye{background:none;border:1px solid var(--line);color:var(--muted);padding:0 .65rem;cursor:pointer;transition:color .2s,border-color .2s}
+#syncEye:hover{color:var(--ink);border-color:var(--line-strong)}
+.sync-actions{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.25rem}
+.sync-actions .btn{height:2.5rem;font-size:10px;flex:1;min-width:-moz-fit-content;min-width:fit-content}
+.btn.primary{background:var(--invert-bg);color:var(--invert-fg)}
+.btn.primary:hover{opacity:.8}
+#syncStatus{min-height:1rem;color:var(--muted);white-space:pre-line}
+#syncStatus.ok{color:#7bc47f}
+#syncStatus.err{color:#ff6a54}
+
+@media (prefers-reduced-motion:reduce){
+  .wm-letter{animation:none!important;opacity:1!important;transform:none!important}
+  .reveal{opacity:1!important;transform:none!important;transition:none!important}
+  .sync-dot{transition:none!important}
+}
+</style>
+</head>
+<body>
+
+<nav class="site" id="site-nav">
+  <div class="wrap bar">
+    <a class="brand" href="./" aria-label="Lenancker">
+      <svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="2.2" opacity="0.55"/><rect x="13" y="3" width="8" height="8" rx="2.2" opacity="0.55"/><rect x="3" y="13" width="8" height="8" rx="2.2" opacity="0.55"/><rect x="13" y="13" width="8" height="8" rx="2.2"/></svg>
+      <span>LENANCKER</span>
+    </a>
+    <div class="links">
+      <a href="./">Launcher</a>
+      <a href="https://github.com/arthurlenancker-boop/Lenancker_launcher" target="_blank" rel="noopener">GitHub</a>
+      <button id="syncBtn" aria-expanded="false" aria-controls="syncCard" aria-label="Synchronisation"><span class="sync-dot" id="syncDot"></span>Sync</button>
+    </div>
+  </div>
+</nav>
+
+<main id="main">
+  <!-- Accès direct pour clavier et lecteurs d'écran : retour au launcher. -->
+  <nav class="sr-only" aria-label="Retour au launcher">
+    <ul><li><a href="./">Page d'accueil du launcher</a></li></ul>
+  </nav>
+
+  <section id="hero">
+    <div class="stage">
+      <canvas id="galaxy" aria-hidden="true"></canvas>
+      <p id="coordhud" class="hud-label" aria-hidden="true"></p>
+      <div class="center">
+        <div data-reveal-group>
+          <div class="halo" aria-hidden="true"></div>
+          <div class="wordwrap">
+            <div class="wordblur" aria-hidden="true"></div>
+            <div class="wordmark" role="img" aria-label="LENANCKER"><span class="wm-letter" data-i="0" style="padding-right:.04em"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="display:inline-block;width:.82em;height:.82em;vertical-align:-.02em"><rect x="3" y="3" width="8" height="8" rx="2.2" opacity="0.55"/><rect x="13" y="3" width="8" height="8" rx="2.2" opacity="0.55"/><rect x="3" y="13" width="8" height="8" rx="2.2" opacity="0.55"/><rect x="13" y="13" width="8" height="8" rx="2.2"/></svg></span><span class="wm-letter" data-i="1">E</span><span class="wm-letter" data-i="2">N</span><span class="wm-letter" data-i="3">A</span><span class="wm-letter" data-i="4">N</span><span class="wm-letter" data-i="5">C</span><span class="wm-letter" data-i="6">K</span><span class="wm-letter" data-i="7">E</span><span class="wm-letter" data-i="8">R</span></div>
+          </div>
+          <h1 class="reveal">Tes données d'études, synchronisées.</h1>
+          <p class="lede reveal">Connecte le launcher à ton serveur privé (PocketBase sur le PC Ubuntu, accessible par Tailscale) pour retrouver tes données sur ton téléphone et ton ordinateur.</p>
+          <p class="hud-label reveal" style="color:var(--faint)">Clique une icône de la galaxie pour ouvrir une app</p>
+          <div class="cta-row reveal">
+            <a class="btn ghost" href="./">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+              Retour au launcher</a>
+          </div>
+          <div class="sync-card reveal" id="syncCard">
+            <div class="panel-head">
+              <p class="hud-label" style="color:var(--muted)">Synchronisation</p>
+              <p class="hud-label" style="color:var(--faint)">Réseau privé · Tailscale</p>
+            </div>
+            <p class="hud-label sync-lab">Serveur</p>
+            <input class="sync-input" id="syncServer" type="url" spellcheck="false" autocomplete="off" placeholder="https://pcarthur-1.tailda0234.ts.net">
+            <p class="hud-label sync-lab">E-mail</p>
+            <input class="sync-input" id="syncEmail" type="email" autocomplete="username" placeholder="ton@email.fr">
+            <p class="hud-label sync-lab">Mot de passe</p>
+            <div class="sync-passrow">
+              <input class="sync-input" id="syncPass" type="password" autocomplete="current-password" placeholder="••••••••">
+              <button type="button" id="syncEye" class="hud-label" aria-label="Afficher ou masquer le mot de passe">afficher</button>
+            </div>
+            <div class="sync-actions">
+              <button type="button" id="syncConnect" class="btn primary">Se connecter</button>
+              <button type="button" id="syncTest" class="btn ghost">Tester</button>
+            </div>
+            <p class="hud-label" id="syncStatus" aria-live="polite"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="assets/js/apps.js" defer></script>
+<script src="assets/js/galaxy.js" defer></script>
+<script src="assets/js/sync.js" defer></script>
+<script>
+/* Câblage de la page de connexion : service worker, révélation, carte sync.
+   Les scripts defer sont chargés avant DOMContentLoaded. */
+document.addEventListener('DOMContentLoaded', function(){
+  'use strict';
+  function el(id){ return document.getElementById(id); }
+
+  /* Service worker (hors-ligne PWA) */
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  }
+
+  /* Révélation au chargement */
+  if('IntersectionObserver' in window){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('seen'); } });
+    }, {threshold:.12});
+    document.querySelectorAll('.reveal').forEach(function(node){ io.observe(node); });
+  }else{
+    document.querySelectorAll('.reveal').forEach(function(node){ node.classList.add('seen'); });
+  }
+
+  /* Synchronisation (assets/js/sync.js) */
+  var sync = window.LenanckerSync;
+  if(!sync){ return; }
+  var btn = el('syncBtn'), card = el('syncCard'), dot = el('syncDot'), status = el('syncStatus');
+  var F = { server: el('syncServer'), email: el('syncEmail'), pass: el('syncPass') };
+  var cfg = sync.loadConfig() || {};
+  F.server.value = cfg.server || sync.DEFAULT_SERVER;
+  F.email.value = cfg.email || '';
+  function setStatus(t, cls){ status.textContent = t; status.className = 'hud-label' + (cls ? ' ' + cls : ''); }
+  function setDot(s){ dot.className = 'sync-dot' + (s ? ' ' + s : ''); }
+  if(cfg.token){
+    setDot('ok');
+    setStatus('Connecté — la synchronisation est active.');
+  }
+  btn.addEventListener('click', function(){
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(function(){ F.email.focus(); }, 400);
+  });
+  el('syncEye').addEventListener('click', function(){
+    var show = F.pass.type === 'password';
+    F.pass.type = show ? 'text' : 'password';
+    this.textContent = show ? 'masquer' : 'afficher';
+  });
+  el('syncTest').addEventListener('click', function(){
+    setDot('busy'); setStatus('Test en cours…');
+    sync.testServer(F.server.value).then(function(res){
+      if(res.ok){ setDot('ok'); setStatus('Serveur joignable — PocketBase répond.'); }
+      else{ setDot('err'); setStatus(res.error, 'err'); }
+    });
+  });
+  el('syncConnect').addEventListener('click', function(){
+    sync.connect(F.server.value, F.email.value, F.pass.value).then(function(res){
+      if(res.ok){
+        F.pass.value = ''; setDot('ok'); setStatus('Connecté — les apps peuvent synchroniser.');
+      }else{
+        setDot('err'); setStatus(res.error, 'err');
+      }
+    });
+  });
+});
+</script>
+</body>
+</html>
