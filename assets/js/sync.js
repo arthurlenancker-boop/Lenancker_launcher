@@ -17,6 +17,8 @@ var DEFAULT_SERVER = 'https://pcarthur-1.tailda0234.ts.net';
 var STORAGE_KEY = 'lenancker.sync.v1';
 var ENDPOINT_HEALTH = '/api/health';
 var ENDPOINT_AUTH = '/api/collections/users/auth-with-password';
+var ENDPOINT_SYNC = '/api/collections/sync_records/records';
+var META_PREFIX = 'lenancker.sync.meta.';
 
 /* ---------- fonctions pures (testées sous Node) ---------- */
 
@@ -60,6 +62,35 @@ function validateConfig(cfg){
   return { server: server, email: email, token: token };
 }
 
+/* Convertit une date PocketBase (« 2026-11-17 18:30:00.000Z ») en
+   millisecondes. Retourne 0 si la valeur est absente ou illisible. */
+function pbDateToMs(s){
+  if(typeof s !== 'string' || s === ''){ return 0; }
+  var iso = s.indexOf(' ') > -1 ? s.replace(' ', 'T') : s;
+  var t = Date.parse(iso);
+  return isNaN(t) ? 0 : t;
+}
+
+/* Décide s'il faut rapatrier l'enregistrement distant : « pull » quand
+   le serveur a changé depuis la dernière synchronisation connue,
+   sinon « none ». Pure. */
+function decideSync(syncedAtMs, remoteUpdatedMs){
+  var last = Number(syncedAtMs) || 0;
+  var remote = Number(remoteUpdatedMs) || 0;
+  return remote > last ? 'pull' : 'none';
+}
+
+/* Interprète un statut HTTP PocketBase en résultat normalisé :
+   ok:true, ou ok:false avec authExpired (401), missingCollection (404),
+   ou error générique. Pure. */
+function interpretStatus(status, json, action){
+  if(status === 401){ return { ok:false, authExpired:true, error:'Session expirée — reconnecte-toi sur la page Sync.' }; }
+  if(status === 403){ return { ok:false, error:'Accès refusé : vérifie les règles de la collection sync_records.' }; }
+  if(status === 404){ return { ok:false, missingCollection:true, error:'Collection sync_records absente du serveur : crée-la dans la console PocketBase.' }; }
+  if(status < 200 || status >= 300){ return { ok:false, error:'Erreur serveur (' + action + ', HTTP ' + status + ').' }; }
+  return { ok:true, json: json };
+}
+
 /* ---------- stockage local (navigateur uniquement) ---------- */
 
 function loadConfig(){
@@ -86,6 +117,28 @@ function saveConfig(cfg){
 function clearConfig(){
   try{
     root.localStorage.removeItem(STORAGE_KEY);
+    return true;
+  }catch(e){
+    return false;
+  }
+}
+
+/* Métadonnées de synchronisation par app : { syncedAtMs } (dernier
+   « updated » du serveur vu lors d'un échange réussi), localStorage,
+   clé META_PREFIX + appKey. */
+function loadMeta(appKey){
+  try{
+    var raw = root.localStorage ? root.localStorage.getItem(META_PREFIX + appKey) : null;
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){
+    return null;
+  }
+}
+
+function saveMeta(appKey, meta){
+  if(!meta || typeof meta !== 'object'){ return false; }
+  try{
+    root.localStorage.setItem(META_PREFIX + appKey, JSON.stringify({ syncedAtMs: Number(meta.syncedAtMs) || 0 }));
     return true;
   }catch(e){
     return false;
@@ -147,18 +200,106 @@ function connect(server, email, password){
     });
 }
 
+/* En-têtes d'authentification PocketBase pour les écritures. */
+function authHeaders(token){
+  return { 'Authorization': token, 'Content-Type': 'application/json' };
+}
+
+/* ---------- synchronisation des données (collection sync_records) ---------- */
+
+/* Rapatrie l'enregistrement d'une app (GET filtré par clé).
+   Résout { ok:true, changed, empty, value, updatedMs, id } ou une
+   erreur normalisée. changed vaut vrai quand le serveur a du nouveau
+   depuis la dernière synchronisation (décidé par decideSync). */
+function pullRecord(appKey){
+  var cfg = loadConfig();
+  if(!cfg){ return Promise.resolve({ ok:false, error:'Non connecté.' }); }
+  var url = joinEndpoint(cfg.server, ENDPOINT_SYNC) +
+    '?filter=' + encodeURIComponent('(key="' + appKey + '")') + '&perPage=1';
+  return fetch(url, { method:'GET', headers:{ 'Authorization': cfg.token } })
+    .then(function(res){
+      return res.json().then(function(j){ return interpretStatus(res.status, j, 'lecture'); });
+    })
+    .then(function(out){
+      if(!out.ok){ return out; }
+      var items = out.json && Array.isArray(out.json.items) ? out.json.items : [];
+      if(items.length === 0){ return { ok:true, changed:false, empty:true }; }
+      var rec = items[0];
+      var updatedMs = pbDateToMs(rec.updated);
+      var meta = loadMeta(appKey) || {};
+      return {
+        ok:true,
+        changed: decideSync(meta.syncedAtMs, updatedMs) === 'pull',
+        empty:false,
+        value: JSON.stringify(rec.data || null),
+        updatedMs: updatedMs,
+        id: rec.id
+      };
+    })
+    .catch(function(){
+      return { ok:false, error:'Serveur injoignable.' };
+    });
+}
+
+/* Envoie la valeur d'une app (chaîne JSON ou objet) : PATCH si
+   l'enregistrement existe, sinon POST. Résout
+   { ok:true, updatedMs, id } ou une erreur normalisée. */
+function pushRecord(appKey, value){
+  var cfg = loadConfig();
+  if(!cfg){ return Promise.resolve({ ok:false, error:'Non connecté.' }); }
+  var base = joinEndpoint(cfg.server, ENDPOINT_SYNC);
+  var payload;
+  try{
+    payload = typeof value === 'string' ? JSON.parse(value) : value;
+  }catch(e){
+    return Promise.resolve({ ok:false, error:'Données locales illisibles.' });
+  }
+  var query = '?filter=' + encodeURIComponent('(key="' + appKey + '")') + '&perPage=1';
+  return fetch(base + query, { method:'GET', headers:{ 'Authorization': cfg.token } })
+    .then(function(res){
+      return res.json().then(function(j){ return interpretStatus(res.status, j, 'recherche'); });
+    })
+    .then(function(out){
+      if(!out.ok){ return out; }
+      var rec = out.json && Array.isArray(out.json.items) && out.json.items[0] ? out.json.items[0] : null;
+      var body = JSON.stringify({ key: appKey, data: payload });
+      if(rec){
+        return fetch(base + '/' + rec.id, { method:'PATCH', headers: authHeaders(cfg.token), body: body });
+      }
+      return fetch(base, { method:'POST', headers: authHeaders(cfg.token), body: body });
+    })
+    .then(function(res){
+      return res.json().then(function(j){ return interpretStatus(res.status, j, 'envoi'); });
+    })
+    .then(function(out){
+      if(!out.ok){ return out; }
+      return { ok:true, updatedMs: pbDateToMs(out.json && out.json.updated), id: out.json && out.json.id };
+    })
+    .catch(function(){
+      return { ok:false, error:'Serveur injoignable.' };
+    });
+}
+
 /* ---------- API publique ---------- */
 var api = {
   DEFAULT_SERVER: DEFAULT_SERVER,
   STORAGE_KEY: STORAGE_KEY,
+  META_PREFIX: META_PREFIX,
   normalizeServer: normalizeServer,
   joinEndpoint: joinEndpoint,
   validateConfig: validateConfig,
+  pbDateToMs: pbDateToMs,
+  decideSync: decideSync,
+  interpretStatus: interpretStatus,
   loadConfig: loadConfig,
   saveConfig: saveConfig,
   clearConfig: clearConfig,
+  loadMeta: loadMeta,
+  saveMeta: saveMeta,
   testServer: testServer,
-  connect: connect
+  connect: connect,
+  pullRecord: pullRecord,
+  pushRecord: pushRecord
 };
 
 if(typeof module !== 'undefined' && module.exports){
