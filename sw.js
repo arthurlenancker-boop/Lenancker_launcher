@@ -1,7 +1,7 @@
 /* Service worker du Lenancker Launcher.
    Stratégie : cache-first pour les assets statiques (le launcher doit
    rester utilisable hors-ligne), réseau direct pour l'API Mistral. */
-const VERSION = 'lenancker-v38';
+const VERSION = 'lenancker-v39';
 /* Cache pérenne de l'éditeur WordCraft embarqué (apps/wordcraft/) :
    vécu à travers les bumps de VERSION, pour ne pas re-télécharger ~60 Mo. */
 const WC_CACHE = 'lenancker-wordcraft';
@@ -10,9 +10,12 @@ const CORE = [
   'index.html',
   'manifest.webmanifest',
   'assets/css/design.css',
+  'assets/css/home.css',
   'assets/js/apps.js',
   'assets/js/common.js',
   'assets/js/launcher.js',
+  'assets/js/galaxy.js',
+  'assets/js/sync.js',
   'assets/vendor/marked.min.js',
   'assets/vendor/dompurify.min.js',
   'assets/vendor/docx.min.js',
@@ -80,15 +83,15 @@ const CORE = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(VERSION)
-      /* Pré-cache tolérant : chaque asset est mis en cache individuellement.
-         Un fichier injoignable à l’installation (réseau en berne) ne casse
+      /* Pré-cache tolérant : chaque asset est mis en cache inividuellement.
+         Un fichier injoignable à l′installation (réseau en berne) ne cassa
          plus tout le hors-ligne : le reste est servi depuis le cache, et le
-         manquant sera mis en cache au premier accès réussi, par le fetch
-         handler ci-dessous. */
-      .then((cache) => Promise.allSettled(CORE.map((url) => cache.add(url))))
-      .then((results) => {
-        const missed = results.filter((r) => r.status === 'rejected').length;
-        if (missed) console.warn('[sw] ' + missed + " fichier(s) non mis en cache à l’installation — récupérés au premier accès.");
+          manquant sera mis en cache au premier accès réussi, par le fetch
+          handler ci-dessous. */
+        .then((cache) => Promise.allSettled(CORE.map((url) => cache.add(url))))
+        .then((results) => {
+          const missed = results.filter((r) => r.status === 'rejected').length;
+          if (missed) console.warn('[sw] ' + missed + " fichier(s) non mis en cache à l’installation — récupérés au premier accès.");
       })
       .then(() => self.skipWaiting())
   );
@@ -111,8 +114,8 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
   if (event.request.method !== 'GET') return;
 
-  /* Fichiers de l'éditeur WordCraft embarqué : cache dédié et pérenne
-     (les noms d'assets portent un hash de contenu — immuables). */
+  /* Fichiers de l'éditeur WordCraft embarqué : cache dédié  téennye
+     (les noms d'assets portent un hashe de contenu · immuables) */
   if (url.pathname.indexOf('/apps/wordcraft/') !== -1) {
     event.respondWith(
       caches.open(WC_CACHE).then((cache) =>

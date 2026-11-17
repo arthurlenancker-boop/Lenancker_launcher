@@ -1,0 +1,149 @@
+/* ============================================================
+   Accueil — hero galaxie + carte de synchronisation.
+   Complète design.css : réutilise ses tokens et composants
+   (.btn, .field, .input, .glass, .overline, .reveal, .mono…)
+   sans rien recéfinir. Le moteur de la galaxie (galaxy.js) lit
+   --line et --accent sur l'élément racine.
+   ============================================================ */
+:root { --line: rgba(242, 239, 231, 0.16); }
+
+/* --- Navigation haute --- */
+.home-nav { display: flex; align-items: center; gap: 0.15rem; }
+.home-link {
+  appearance: none; background: none; border: none; cursor: pointer;
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+  font-size: 0.66rem; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--ink-dim); padding: 0.45rem 0.6rem; border-radius: 8px;
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  text-decoration: none;
+  transition: color 0.2s, background 0.2s;
+}
+.home-link:hover { color: var(--ink); background: rgba(242, 239, 231, 0.06); }
+.sync-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex: none;
+  background: var(--ink-faint);
+  transition: background 0.25s, box-shadow 0.25s;
+}
+.sync-dot.busy { background: var(--warn); animation: sync-pulse 1s ease-in-out infinite; }
+.sync-dot.ok { background: var(--ok); box-shadow: 0 0 10px color-mix(in srgb, var(--ok) 65%, transparent); }
+.sync-dot.err { background: var(--err); box-shadow: 0 0 10px color-mix(in srgb, var(--err) 65%, transparent); }
+@keyframes sync-pulse { 50% { opacity: 0.35; } }
+
+/* --- Scène du hero : la galaxie derrière, le contenu au-dessus --- */
+.hero-stage {
+  position: relative;
+  min-height: calc(100svh - 8rem);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+#galaxy { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#coordhud {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0; padding: 0.25rem 0.4rem;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  background: var(--ink); color: var(--bg);
+  white-space: nowrap; opacity: 0; transition: opacity 0.3s;
+  pointer-events: none;
+}
+.hero-center {
+  pointer-events: none; position: relative; z-index: 40;
+  margin: 0 auto; display: flex; width: 100%; max-width: 1280px; flex: 1;
+  flex-direction: column; align-items: center; justify-content: center;
+  padding: 7rem 1.5rem 3rem;
+}
+.hero-block {
+  pointer-events: auto; position: relative;
+  display: flex; width: 100%; max-width: 46rem;
+  flex-direction: column; align-items: center; text-align: center;
+}
+.hero.hero-block { margin: 0; }
+.halo {
+  position: absolute; inset: -88px -128px;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--bg) 78%, transparent), transparent);
+  pointer-events: none;
+}
+
+/* --- Logotype lettre par lettre --- */
+.wordwrap { pointer-events: none; position: relative; z-index: 40; width: 100%; container-type: inline-size; }
+.wordblur {
+  position: absolute; left: -6%; right: -6%; top: -34%; bottom: -34%;
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  mask-image: radial-gradient(closest-side, black 45%, transparent 100%);
+  -webkit-mask-image: radial-gradient(closest-side, black 45%, transparent 100%);
+}
+.wordmark {
+  position: relative; white-space: pre;
+  color: var(--ink);
+  font-family: var(--font); font-weight: 800; letter-spacing: 0.01em;
+  font-size: 16cqw; line-height: 1;
+}
+.wm-letter {
+  display: inline-block; text-align: center;
+  will-change: transform, opacity;
+  text-shadow:
+    0 0 0.6vw color-mix(in srgb, var(--bg) 92%, transparent),
+    0 0.25vw 2.4vw color-mix(in srgb, var(--bg) 78%, transparent),
+    0 0.4vw 5vw color-mix(in srgb, var(--bg) 55%, transparent);
+  opacity: 0; transform: translateY(0.35em);
+}
+.wm-letter svg { width: 0.82em; height: 0.82em; vertical-align: -0.02em; }
+.wm-letter.in { animation: wm-in 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) forwards; }
+@keyframes wm-in {
+  from { opacity: 0; transform: translateY(0.35em); filter: blur(10px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+/* --- Texte d'accroche et boutons --- */
+.cta-row {
+  display: flex; flex-direction: column; gap: 0.75rem;
+  width: 100%; max-width: 24rem; align-items: center;
+  margin-top: 1.75rem;
+}
+@media (min-width: 640px) { .cta-row { flex-direction: row; max-width: none; } }
+.dl-alt { margin-top: 0.5rem; font-size: 0.875rem; color: var(--ink-dim); }
+.dl-alt a { text-decoration: underline; }
+.dl-alt a:hover { color: var(--ink); }
+.meta-row {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+  gap: 0.9rem 0.75rem; margin-top: 1.75rem; color: var(--ink-faint);
+}
+.meta-hud { font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; }
+
+/* design.css cible `.hero p` (spécificité 0,1,1) : les micro-libellés du hero
+   reprennent ici leurs tailles et couleurs, qui sinon seraient écrasées. */
+.hero p.overline { font-size: 0.7rem; color: var(--accent); max-width: none; }
+.hero .meta-hud { font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-faint); }
+
+/* --- Carte de synchronisation (PocketBase derrière Tailscale) --- */
+.sync-card {
+  margin-top: 2.25rem; width: 100%; max-width: 26rem;
+  text-align: left; display: flex; flex-direction: column; gap: 0.9rem;
+  padding: 1.4rem 1.5rem;
+}
+.sync-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.sync-head .overline { margin: 0; }
+.sync-card .sync-hud { font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-faint); }
+.sync-passrow { display: flex; gap: 0.5rem; }
+.sync-passrow .input { flex: 1; }
+.sync-actions { display: flex; gap: 0.6rem; align-items: center; }
+.sync-card .sync-status { min-height: 1.1rem; margin: 0; font-size: 0.72rem; letter-spacing: 0.04em; color: var(--ink-faint); max-width: none; }
+.sync-card .sync-status.ok { color: var(--ok); }
+.sync-card .sync-status.err { color: var(--err); }
+.sync-card .sync-status.busy { color: var(--warn); }
+
+/* --- Grille des apps repliée sous le hero --- */
+.apps-fold { display: none; margin-top: 1rem; }
+.apps-fold.open { display: block; animation: fold-in 0.6s var(--ease) both; }
+.apps-fold .overline { margin-bottom: 1.1rem; }
+@keyframes fold-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- Mouvement réduit : le logotype reste posé, sans animation --- */
+@media (prefers-reduced-motion: reduce) {
+  .wm-letter { animation: none !important; opacity: 1 !important; transform: none !important; filter: none !important; }
+  .apps-fold.open { animation: none !important; }
+  .sync-dot.busy { animation: none !important; }
+}
