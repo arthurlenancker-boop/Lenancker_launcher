@@ -54,7 +54,7 @@ jobs:
         working-directory: electron
         shell: pwsh
         run: |
-          $log = npm ci --foreground-scripts 2>&1
+          $log = npm install --no-audit --no-fund --foreground-scripts 2>&1
           $code = $LASTEXITCODE
           $log | ForEach-Object { Write-Host "$_" }
           if ($code -ne 0) {
