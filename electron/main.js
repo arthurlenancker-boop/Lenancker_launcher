@@ -102,8 +102,8 @@ function createWindow() {
       try { fs.appendFileSync(diagLog, JSON.stringify(Object.assign({ t: Date.now() - t0, type }, data)) + '\n'); } catch (e) { /* diagnostic best effort */ }
     };
     win.webContents.on('render-process-gone', (e, d) => log('render-process-gone', { reason: d.reason, exitCode: d.exitCode }));
-    win.webContents.on('unresponsive', () => log('unresponsive', {}));
-    win.webContents.on('responsive', () => log('responsive', {}));
+    win.on('unresponsive', () => log('unresponsive', {}));
+    win.on('responsive', () => log('responsive', {}));
     win.webContents.on('dom-ready', () => log('dom-ready', {}));
     win.webContents.on('did-finish-load', () => log('did-finish-load', {}));
     win.webContents.on('did-fail-load', (e, code, desc, url, isMain) => log('did-fail-load', { code, desc, url }));

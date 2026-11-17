@@ -362,8 +362,13 @@
          suivis par MutationObserver : aucun JS d'app à modifier. --- */
   (function () {
     const pilled = new Set();
+    /* DIAG v5 : jalons + chien de garde (a retirer) */
+    let __placeCalls = 0, __rafCalls = 0, __wd = 0;
+    setInterval(() => { console.log('SEGWD:' + (__wd++)); }, 100);
 
     function place(seg) {
+      if (__placeCalls < 30) console.log('SEG:place:' + (seg.id || seg.className) + ':' + (__placeCalls));
+      __placeCalls++;
       const pill = seg.querySelector(':scope > .seg-pill');
       if (!pill) return;
       const active = seg.querySelector('button.active, .segbtn.on');
@@ -380,6 +385,8 @@
       pill.style.left = `${left}px`;
       pill.style.width = `${width}px`;
       requestAnimationFrame(() => {
+        if (__rafCalls < 30) console.log('SEG:raf:' + (__rafCalls));
+        __rafCalls++;
         pill.style.transition = '';
         pill.classList.add('placed');
       });
@@ -400,10 +407,12 @@
         attributes: true, attributeFilter: ['class', 'hidden'],
         childList: true, subtree: true,
       });
+      console.log('SEG:pillified:' + (seg.id || 'anon'));
     }
 
     function scan() { document.querySelectorAll('.seg').forEach(pillify); }
     scan();
+    console.log('SEG:scan-done');
     /* Segmentés créés après coup (dialogues OCR…) : équipés aussi. */
     let queued = false;
     new MutationObserver(() => {
@@ -413,7 +422,7 @@
     }).observe(document.body, { childList: true, subtree: true });
     /* Largeurs : les polices chargent, la fenêtre bouge. */
     const replaceAll = () => pilled.forEach(place);
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(replaceAll);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { console.log('SEG:fonts-ready'); replaceAll(); });
     let rz = null;
     window.addEventListener('resize', () => {
       clearTimeout(rz);
