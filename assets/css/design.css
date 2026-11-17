@@ -52,7 +52,7 @@
   --ink-faint: #6e6a5f;
 
   --accent: #ff5310;
-  --accent-soft: rgba(255, 83, 16, 0.14);
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
   --on-accent: #160b05;
 
   --glass: rgba(242, 239, 231, 0.035);
@@ -117,7 +117,7 @@ img { max-width: 100%; }
 }
 .bg-glow {
   position: absolute; width: 60vmax; height: 60vmax; right: -25vmax; top: -30vmax;
-  background: radial-gradient(circle, rgba(255, 83, 16, 0.16), transparent 62%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 16%, transparent), transparent 62%);
   filter: blur(70px);
   animation: glow-drift 30s ease-in-out infinite alternate;
 }
@@ -233,7 +233,7 @@ img { max-width: 100%; }
   width: 42px; height: 42px; border-radius: 11px;
   background: var(--accent);
   display: grid; place-items: center;
-  box-shadow: 0 8px 26px rgba(255, 83, 16, 0.35), var(--rim-light);
+  box-shadow: 0 8px 26px color-mix(in srgb, var(--accent) 35%, transparent), var(--rim-light);
   flex: none;
   transition: transform 0.5s var(--ease-spring);
 }
@@ -418,10 +418,10 @@ img { max-width: 100%; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 .btn-primary {
   background: var(--accent); border-color: var(--accent); color: var(--on-accent);
-  box-shadow: 0 10px 30px rgba(255, 83, 16, 0.28);
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 /* Bouton principal : le halo s'étend au survol (SpotiKit : 8/24 px → 12/30 px). */
-.btn-primary:hover { box-shadow: 0 14px 38px rgba(255, 83, 16, 0.42), var(--rim-light); border-color: var(--accent); }
+.btn-primary:hover { box-shadow: 0 14px 38px color-mix(in srgb, var(--accent) 42%, transparent), var(--rim-light); border-color: var(--accent); }
 .btn-ghost { background: transparent; }
 .btn-sm { padding: 0.42rem 0.85rem; font-size: 0.8rem; }
 
@@ -438,7 +438,7 @@ img { max-width: 100%; }
   font-size: 0.92rem; font-family: inherit;
   transition: border-color 0.25s, box-shadow 0.25s;
 }
-.input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 83, 16, 0.22); }
+.input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
 .input::placeholder { color: var(--ink-faint); }
 
 /* --- Animations d'apparition « Rise » (SpotiKit : 40 px, flou 8 px,
@@ -504,7 +504,7 @@ img { max-width: 100%; }
   font-size: 0.8rem; font-weight: 700;
   transition: transform 0.2s var(--ease), box-shadow 0.2s;
 }
-.toast .toast-action:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(255, 83, 16, 0.4); }
+.toast .toast-action:hover { transform: translateY(-1px); box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 40%, transparent); }
 
 /* --- Info-bulles « SpotiKit » (système délégué, posé par common.js) ---
    Bulle de verre ancrée au pointeur (corrigée pour rester dans l'écran),

@@ -1,6 +1,9 @@
 /* Arbre de probabilité — styles de l'app.
    Thème launcher (verre sombre) autour, feuille blanche pour le schéma :
-   style « manuel de maths » — traits noirs, serif, fond de dessin blanc. */
+   style « manuel de maths » — traits noirs, serif, fond de dessin blanc.
+   Couleur de l'app : celle de sa carte sur l'écran d'accueil (apps.js) ;
+   les feuilles du schéma restent, elles, noires sur blanc. */
+:root { --accent: #9ec1ff; }
 
 /* --- En-tête du panneau de travail --- */
 .panel-head {
