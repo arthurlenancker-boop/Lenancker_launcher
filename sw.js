@@ -8,10 +8,12 @@ const WC_CACHE = 'lenancker-wordcraft';
 const CORE = [
   './',
   'index.html',
+  'sync.html',
   'manifest.webmanifest',
   'assets/css/design.css',
   'assets/js/apps.js',
   'assets/js/common.js',
+  'assets/js/launcher.js',
   'assets/js/galaxy.js',
   'assets/js/sync.js',
   'assets/vendor/marked.min.js',
