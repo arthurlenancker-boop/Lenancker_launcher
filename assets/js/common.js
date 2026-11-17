@@ -362,15 +362,15 @@
          suivis par MutationObserver : aucun JS d'app à modifier. --- */
   (function () {
     const pilled = new Set();
-    /* DIAG v5 : jalons + chien de garde (a retirer) */
-    let __placeCalls = 0, __rafCalls = 0, __wd = 0;
-    setInterval(() => { console.log('SEGWD:' + (__wd++)); }, 100);
+    /* DIAG v6 : etat complet a chaque pose (a retirer) */
+    let __placeCalls = 0, __rafCalls = 0;
 
     function place(seg) {
-      if (__placeCalls < 30) console.log('SEG:place:' + (seg.id || seg.className) + ':' + (__placeCalls));
+      if (__placeCalls < 40) console.log('SEG:call:' + (__placeCalls) + ':' + (seg.id || seg.className));
       __placeCalls++;
       const pill = seg.querySelector(':scope > .seg-pill');
       if (!pill) return;
+      if (__placeCalls <= 41) console.log('SEG:st:' + (seg.id || seg.className) + ':pill=[' + pill.className + ']:active=' + !!seg.querySelector('button.active, .segbtn.on') + ':parent=' + !!seg.offsetParent + ':seg=[' + seg.className + ']');
       const active = seg.querySelector('button.active, .segbtn.on');
       if (!active || !seg.offsetParent) { pill.classList.remove('placed'); return; }
       const left = active.offsetLeft - seg.clientLeft;
@@ -403,8 +403,13 @@
       seg.classList.add('pilled');
       pilled.add(seg);
       place(seg);
-      new MutationObserver(() => place(seg)).observe(seg, {
-        attributes: true, attributeFilter: ['class', 'hidden'],
+      new MutationObserver((muts) => {
+        if (__placeCalls < 40) {
+          for (const m of muts) console.log('SEG:rec:' + m.type + ':' + (m.attributeName || '') + ':' + (m.target.id || m.target.className || m.target.nodeName) + ':[' + (m.oldValue || '') + ']');
+        }
+        place(seg);
+      }).observe(seg, {
+        attributes: true, attributeFilter: ['class', 'hidden'], attributeOldValue: true,
         childList: true, subtree: true,
       });
       console.log('SEG:pillified:' + (seg.id || 'anon'));

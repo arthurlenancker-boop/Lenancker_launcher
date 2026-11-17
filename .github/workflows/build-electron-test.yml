@@ -201,48 +201,20 @@ jobs:
         working-directory: electron
         run: npm install --no-audit --no-fund
 
-      - name: Test A module pilule instrumente
+      - name: Test v6 etat complet pilule
         working-directory: electron
         shell: bash
         run: |
-          LENANCKER_URL='app://local/apps/focus/index.html' LENANCKER_EVENTS=ev-a5.jsonl xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
+          LENANCKER_URL='app://local/apps/focus/index.html' LENANCKER_EVENTS=ev-6.jsonl xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
           sleep 3
-          DIAG_OUT=diag-v5-a timeout 60 node diag.js >/dev/null 2>&1 || true
+          DIAG_OUT=diag-v6 timeout 60 node diag.js >/dev/null 2>&1 || true
           pkill -f electron || true
-          echo "::error::[A pilule instrumentee] diag=$(jq -c .problems diag-v5-a.json 2>/dev/null || echo vide)"
-
-      - name: Test B pose sans rAF
-        working-directory: electron
-        shell: bash
-        run: |
-          cp common-noraf.js ../assets/js/common.js
-          LENANCKER_URL='app://local/apps/focus/index.html' LENANCKER_EVENTS=ev-b5.jsonl xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
-          sleep 3
-          DIAG_OUT=diag-v5-b timeout 60 node diag.js >/dev/null 2>&1 || true
-          pkill -f electron || true
-          git -C .. checkout -- assets/js/common.js
-          echo "::error::[B pose sans rAF] diag=$(jq -c .problems diag-v5-b.json 2>/dev/null || echo vide)"
-
-      - name: Test C sans observateur par segment
-        working-directory: electron
-        shell: bash
-        run: |
-          cp common-noobs.js ../assets/js/common.js
-          LENANCKER_URL='app://local/apps/focus/index.html' LENANCKER_EVENTS=ev-c5.jsonl xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
-          sleep 3
-          DIAG_OUT=diag-v5-c timeout 60 node diag.js >/dev/null 2>&1 || true
-          pkill -f electron || true
-          git -C .. checkout -- assets/js/common.js
-          echo "::error::[C sans observateur seg] diag=$(jq -c .problems diag-v5-c.json 2>/dev/null || echo vide)"
+          echo "::error::[v6] diag=$(jq -c .problems diag-v6.json 2>/dev/null || echo vide)"
 
       - name: Attacher les resultats a la Release de test
         uses: softprops/action-gh-release@v2
         with:
           tag_name: exe-test-2026-11-17-v2
           files: |
-            electron/diag-v5-a.json
-            electron/diag-v5-b.json
-            electron/diag-v5-c.json
-            electron/ev-a5.jsonl
-            electron/ev-b5.jsonl
-            electron/ev-c5.jsonl
+            electron/diag-v6.json
+            electron/ev-6.jsonl
