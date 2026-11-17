@@ -1,1 +1,113 @@
-<ӿ򍌅
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Lenancker Launcher — Tes apps d'études</title>
+  <meta name="description" content="Lenancker Launcher regroupe les applications d'études d'Arthur : OCR Mistral, Pomodoro, Révision... Installable sur Windows et Android.">
+  <meta name="theme-color" content="#0f0e0b">
+  <link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="assets/css/design.css">
+  <link rel="stylesheet" href="assets/css/home.css">
+</head>
+<body>
+  <div class="bg" aria-hidden="true">
+    <div class="bg-grid"></div>
+    <div class="bg-glow"></div>
+    <div class="bg-grain"></div>
+  </div>
+
+  <main class="shell">
+    <header class="topbar reveal" style="--d:.05s">
+      <a class="brand" href="index.html">
+        <span class="brand-logo" aria-hidden="true" id="brand-logo"></span>
+        <span class="brand-name">Lenancker<em>launcher</em></span>
+      </a>
+      <nav class="home-nav" aria-label="Navigation">
+        <button class="home-link" id="apps-toggle" type="button">Apps</button>
+        <a class="home-link" href="apps/wordcraft/">WordCraft</a>
+        <a class="home-link" href="https://github.com/arthurlenancker-boop/Lenancker_launcher" target="_blank" rel="noopener">GitHub</a>
+        <button class="home-link" id="syncBtn" type="button" aria-label="Aller à la synchronisation">
+          <span class="sync-dot" id="syncDot" aria-hidden="true"></span>Sync
+        </button>
+      </nav>
+    </header>
+
+    <section class="hero-stage" id="hero">
+      <canvas id="galaxy" aria-hidden="true"></canvas>
+      <p id="coordhud" class="mono" aria-hidden="true"></p>
+
+      <div class="hero-center">
+        <div class="hero hero-block">
+          <div class="halo" aria-hidden="true"></div>
+
+          <div class="wordwrap">
+            <div class="wordblur" aria-hidden="true"></div>
+            <div class="wordmark" role="img" aria-label="Lenancker"><span class="wm-letter" data-i="0" style="padding-right:.04em"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2.2" opacity="0.55"/><rect x="13" y="3" width="8" height="8" rx="2.2" opacity="0.55"/><rect x="3" y="13" width="8" height="8" rx="2.2" opacity="0.55"/><rect x="13" y="13" width="8" height="8" rx="2.2"/></svg></span><span class="wm-letter" data-i="1">E</span><span class="wm-letter" data-i="2">N</span><span class="wm-letter" data-i="3">A</span><span class="wm-letter" data-i="4">N</span><span class="wm-letter" data-i="5">C</span><span class="wm-letter" data-i="6">K</span><span class="wm-letter" data-i="7">E</span><span class="wm-letter" data-i="8">R</span></div>
+          </div>
+
+          <p class="overline reveal" style="margin-top:1.8rem">Carnet d'outils d'études</p>
+          <h1 class="reveal">Tes apps d'études,<br><em>réunies au même endroit.</em></h1>
+          <p class="reveal">Un launcher léger et animé pour regrouper tes outils de travail : OCR de documents, concentration, révision. Installable sur Windows (.exe) et Android (PWA).</p>
+
+          <div class="cta-row reveal">
+            <button class="btn btn-primary" id="apps-open" type="button">Explorer les apps</button>
+            <a class="btn btn-ghost" href="https://github.com/arthurlenancker-boop/Lenancker_launcher" target="_blank" rel="noopener">Voir le code</a>
+            <a class="dl-alt" href="https://github.com/arthurlenancker-boop/Lenancker_launcher/releases" target="_blank" rel="noopener">Toutes les versions (Windows .exe, mises à jour auto)</a>
+          </div>
+
+          <div class="meta-row reveal">
+            <p class="mono meta-hud" style="margin:0">Windows · Android · Web</p>
+            <p class="mono meta-hud" style="margin:0">Gratuit · Sans compte</p>
+          </div>
+
+          <section class="sync-card glass reveal" id="syncCard" aria-label="Synchronisation des données">
+            <div class="sync-head">
+              <p class="overline">Synchronisation</p>
+              <p class="mono sync-hud">Réseau privé · Tailscale</p>
+            </div>
+            <div class="field">
+              <label for="syncServer">Serveur</label>
+              <input class="input" id="syncServer" type="url" spellcheck="false" autocomplete="off" placeholder="https://pcarthur-1.tailda0234.ts.net">
+            </div>
+            <div class="field">
+              <label for="syncEmail">E-mail</label>
+              <input class="input" id="syncEmail" type="email" autocomplete="username" placeholder="ton@email.fr">
+            </div>
+            <div class="field">
+              <label for="syncPass">Mot de passe</label>
+              <div class="sync-passrow">
+                <input class="input" id="syncPass" type="password" autocomplete="current-password" placeholder="••••••••">
+                <button type="button" id="syncEye" class="btn btn-ghost btn-sm" aria-label="Afficher ou masquer le mot de passe">Afficher</button>
+              </div>
+            </div>
+            <div class="sync-actions">
+              <button type="button" id="syncConnect" class="btn btn-primary">Se connecter</button>
+              <button type="button" id="syncTest" class="btn btn-ghost">Tester</button>
+            </div>
+            <p class="mono sync-status" id="syncStatus" aria-live="polite"></p>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="apps-fold" id="apps-fold">
+      <p class="overline">Les apps</p>
+    <section class="apps-grid" id="apps-grid" aria-label="Applications"></section>
+    </section>
+
+    <footer class="footer reveal" style="--d:.5s">
+      <span>Lenancker Launcher — projets personnels d'Arthur Lenancker</span>
+      <a href="https://github.com/arthurlenancker-boop/Lenancker_launcher" target="_blank" rel="noopener">Voir le code sur GitHub ↖</a>
+    </footer>
+  </main>
+
+  <script src="assets/js/apps.js" defer></script>
+  <script src="assets/js/common.js" defer></script>
+  <script src="assets/js/launcher.js" defer></script>
+  <script src="assets/js/galaxy.js" defer></script>
+  <script src="assets/js/sync.js" defer></script>
+</body>
+</html>
