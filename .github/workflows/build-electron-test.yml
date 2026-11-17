@@ -73,6 +73,58 @@ jobs:
       # Release remplace les espaces des noms de fichiers par des points :
       # les deux ne coincideraient jamais. On aligne donc les fichiers de
       # dist/ sur l'URL de latest.yml avant la publication.
+      # --- Diagnostic : le .exe livre une page Focus vide. On verifie les
+      # ressources embarquees, on capture la console JS des pages dans le
+      # vrai environnement (exe de win-unpacked, protocole app://), et on
+      # publie resources/app en zip pour inspection hors ligne.
+      - name: Diagnostic : ressources embarquees
+        shell: pwsh
+        run: |
+          $app = 'dist/win-unpacked/resources/app'
+          $attendus = @(
+            'index.html','sw.js','manifest.webmanifest',
+            'assets/js/apps.js','assets/js/common.js','assets/js/launcher.js',
+            'assets/css/design.css',
+            'apps/focus/index.html','apps/focus/focus.js','apps/focus/core.js','apps/focus/focus.css',
+            'apps/ocr/index.html','apps/revision/index.html','apps/probabilites/index.html',
+            'docs/recherche-focus-tda-tsa.md'
+          )
+          $manquants = @($attendus | Where-Object { -not (Test-Path (Join-Path $app $_)) })
+          $nb = (Get-ChildItem $app -Recurse -File | Measure-Object).Count
+          Write-Host "resources/app : $nb fichiers"
+          if ($manquants.Count -gt 0) {
+            Write-Host "::error::Manquants dans resources/app : $($manquants -join ', ') (total $nb)"
+          } else {
+            Write-Host "::error::Diagnostic ressources OK : $nb fichiers, rien de manquant"
+          }
+          Compress-Archive -Path "$app/*" -DestinationPath dist/resources-app.zip -Force
+
+      - name: Diagnostic : console de la page d'accueil
+        shell: pwsh
+        run: |
+          $env:LENANCKER_URL = 'app://local/index.html'
+          $p = Start-Process -FilePath 'dist/win-unpacked/Lenancker Launcher.exe' -ArgumentList '--disable-gpu','--enable-logging=stderr' -RedirectStandardError err-home.log -RedirectStandardOutput out-home.log -PassThru
+          Start-Sleep -Seconds 12
+          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          $c = Get-Content err-home.log -Raw -ErrorAction SilentlyContinue
+          Write-Host $c
+          $lines = (($c -split "`n") | Where-Object { $_ -match 'CONSOLE' } | Select-Object -First 25) -join ' | '
+          if ($lines) { Write-Host "::error::Console accueil : $lines" }
+          else { Write-Host "::error::Console accueil : aucun message capture (lancement a verifier)" }
+
+      - name: Diagnostic : console de la page Focus
+        shell: pwsh
+        run: |
+          $env:LENANCKER_URL = 'app://local/apps/focus/index.html'
+          $p = Start-Process -FilePath 'dist/win-unpacked/Lenancker Launcher.exe' -ArgumentList '--disable-gpu','--enable-logging=stderr' -RedirectStandardError err-focus.log -RedirectStandardOutput out-focus.log -PassThru
+          Start-Sleep -Seconds 12
+          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          $c = Get-Content err-focus.log -Raw -ErrorAction SilentlyContinue
+          Write-Host $c
+          $lines = (($c -split "`n") | Where-Object { $_ -match 'CONSOLE' } | Select-Object -First 25) -join ' | '
+          if ($lines) { Write-Host "::error::Console Focus : $lines" }
+          else { Write-Host "::error::Console Focus : aucun message capture (lancement a verifier)" }
+
       - name: Aligner les noms des .exe sur latest.yml
         shell: pwsh
         run: |
@@ -117,3 +169,4 @@ jobs:
             dist/*.exe
             dist/*.exe.blockmap
             dist/latest.yml
+            dist/resources-app.zip

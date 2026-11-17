@@ -88,7 +88,9 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
-  win.loadURL('app://local/index.html');
+  /* Diagnostic : LENANCKER_URL ouvre une page precise (ex. une app) pour
+     capturer sa console dans la CI. Toujours l'accueil en usage normal. */
+  win.loadURL(process.env.LENANCKER_URL || 'app://local/index.html');
 }
 
 const gotLock = app.requestSingleInstanceLock();
