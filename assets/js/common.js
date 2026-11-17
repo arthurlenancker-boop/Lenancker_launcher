@@ -161,19 +161,58 @@
   };
 
   /* --- Reflet du pointeur : la surface d'un élément interactif s'illumine
-         précisément là où se trouve la souris. Le JS ne fait que mettre à
-         jour deux variables (--mx, --my) sur l'élément survolé ; le dégradé
-         radial et son apparition vivent dans design.css (::after).
+         précisément là où se trouve la souris. Le JS met à jour deux
+         variables (--mx, --my) sur l'élément survolé ; les dégradés et
+         leur apparition vivent dans design.css (::after et ::before).
+         La position est lissée image par image (interpolation linéaire
+         vers la cible) : la lumière glisse au lieu de sauter, ce qui
+         fait toute la différence de rendu. Sous « réduire les
+         animations », la position suit le pointeur sans lissage.
          Desktop uniquement : pointeur fin capable de survol. --- */
   if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
     const SPOT = '.app-card:not(.soon), .btn, .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn';
+    const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let el = null, raf = null;
+    let tx = 0, ty = 0, cx = 0, cy = 0;
+    const EASE = 0.16;
+    function place(x, y) {
+      el.style.setProperty('--mx', `${x.toFixed(2)}px`);
+      el.style.setProperty('--my', `${y.toFixed(2)}px`);
+    }
+    function tick() {
+      cx += (tx - cx) * EASE;
+      cy += (ty - cy) * EASE;
+      place(cx, cy);
+      if (Math.abs(tx - cx) < 0.4 && Math.abs(ty - cy) < 0.4) { raf = null; return; }
+      raf = window.requestAnimationFrame(tick);
+    }
+    function stop() {
+      if (raf) window.cancelAnimationFrame(raf);
+      raf = null; el = null;
+    }
     document.addEventListener('pointermove', (e) => {
-      const el = e.target instanceof Element ? e.target.closest(SPOT) : null;
+      /* Page en mode « réduire les animations » : pas de reflet. */
+      const t = e.target instanceof Element && !e.target.closest('.fx-reduce')
+        ? e.target.closest(SPOT) : null;
+      if (t !== el) {
+        if (!t) { stop(); return; }
+        if (raf) window.cancelAnimationFrame(raf);
+        raf = null;
+        el = t;
+        /* À l'entrée, la lumière naît sous le pointeur. */
+        const r = el.getBoundingClientRect();
+        cx = tx = e.clientX - r.left;
+        cy = ty = e.clientY - r.top;
+        place(cx, cy);
+      }
       if (!el) return;
       const r = el.getBoundingClientRect();
-      el.style.setProperty('--mx', `${e.clientX - r.left}px`);
-      el.style.setProperty('--my', `${e.clientY - r.top}px`);
+      tx = e.clientX - r.left;
+      ty = e.clientY - r.top;
+      if (REDUCED.matches) { cx = tx; cy = ty; place(cx, cy); return; }
+      if (!raf) raf = window.requestAnimationFrame(tick);
     }, { passive: true });
+    document.documentElement.addEventListener('pointerleave', stop);
   }
 
   /* --- Service worker (PWA) : chemin résolu depuis le script lui-même,

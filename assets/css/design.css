@@ -127,55 +127,72 @@ img { max-width: 100%; }
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 /* --- Reflet du pointeur : la surface s'illumine à l'endroit exact où
-       la souris se trouve. Le JS met à jour --mx / --my sur l'élément
-       survolé ; ce dégradé radial suit le pointeur et s'efface en douceur
-       au départ. Sélecteurs par page :
-       - accueil : .app-card, .btn (toutes les pages) ;
+       la souris se trouve, et son contour s'allume autour du pointeur.
+       Le JS met à jour --mx / --my (position lissée image par image) ;
+       tout le rendu vit ici. Deux couches :
+       - ::after, le reflet interne : dégradé radial à trois arrêts,
+         rogné aux coins arrondis ;
+       - ::before, le liseré : seul le contour s'allume près du pointeur
+         (anneau obtenu par un masque content-box soustrait au
+         remplissage, technique du bord lumineux).
+       Sélecteurs par page :
+       - toutes les pages : .app-card (accueil), .btn ;
        - OCR : .dropzone (dépôt de fichiers), .dlg-opt (options du
          dialogue), .seg button (segmenté) ;
        - Focus : .seg button (segmenté) ;
        - Révision : .deck-row (paquets), .vboite (boîtes de Leitner),
          .memo-card (carte à retourner) ;
        - Probabilités : .segbtn (segmenté). --- */
-.app-card:not(.soon)::after,
-.btn::after,
-.dropzone::after,
-.dlg-opt::after,
-.deck-row::after,
-.vboite::after,
-.memo-card::after,
-.seg button::after,
-.segbtn::after {
+:is(.app-card:not(.soon), .btn, .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn) {
+  position: relative;
+  overflow: hidden;
+}
+:is(.app-card:not(.soon), .btn, .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn)::after {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
   background: radial-gradient(circle var(--spot-r, 220px) at var(--mx, 50%) var(--my, 50%),
-    color-mix(in srgb, var(--app-accent, var(--accent)) 14%, transparent),
-    transparent 65%);
+    color-mix(in srgb, var(--app-accent, var(--accent)) 16%, transparent) 0%,
+    color-mix(in srgb, var(--app-accent, var(--accent)) 6%, transparent) 40%,
+    transparent 70%);
   opacity: 0;
   transition: opacity 0.35s ease;
   z-index: 1;
 }
-.app-card:not(.soon):hover::after,
-.btn:hover::after,
-.dropzone:hover::after,
-.dlg-opt:hover::after,
-.deck-row:hover::after,
-.vboite:hover::after,
-.memo-card:hover::after,
-.seg button:hover::after,
-.segbtn:hover::after { opacity: 1; }
-/* Ancrage du pseudo-élément sur les surfaces ajoutées (positionnement
-   et rognage aux coins arrondis), et rayon du reflet adapté à la
-   taille de chaque élément. */
-.dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn {
-  position: relative;
-  overflow: hidden;
+/* Le liseré exclut les boutons en chargement : leur ::before est
+   déjà le spinner (ocr.css). */
+:is(.app-card:not(.soon), .btn:not(.loading), .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn)::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: radial-gradient(circle var(--spot-rb, 170px) at var(--mx, 50%) var(--my, 50%),
+    color-mix(in srgb, var(--app-accent, var(--accent)) 60%, transparent),
+    transparent 70%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  z-index: 2;
 }
-.vboite::after { --spot-r: 140px; }
-.seg button::after, .segbtn::after { --spot-r: 90px; }
+:is(.app-card:not(.soon), .btn, .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn):hover::after,
+:is(.app-card:not(.soon), .btn:not(.loading), .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn):hover::before {
+  opacity: 1;
+}
+/* Rayons des deux couches adaptés à la taille de chaque élément. */
+.vboite { --spot-r: 140px; --spot-rb: 120px; }
+.seg button, .segbtn { --spot-r: 90px; --spot-rb: 80px; }
+/* Mode « réduire les animations » (page Focus) : pas de reflet. */
+.fx-reduce :is(.app-card:not(.soon), .btn, .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn)::after,
+.fx-reduce :is(.app-card:not(.soon), .btn:not(.loading), .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn)::before {
+  display: none;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .bg-glow { animation: none; }
