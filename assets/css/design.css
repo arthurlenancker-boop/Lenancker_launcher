@@ -75,6 +75,9 @@
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --rim-light: inset 0 1px 0 rgba(242, 239, 231, 0.07);
   --rim-edge: inset 0 0 0 1px rgba(242, 239, 231, 0.025);
+  /* Survol « carte allumée » (SpotiKit) : le listel du haut s'embrase et
+     le bas s'assombrit — la surface de verre s'éclaire depuis l'intérieur. */
+  --rim-hover: inset 0 1px 0 rgba(242, 239, 231, 0.16), inset 0 -1px 0 rgba(0, 0, 0, 0.4);
 }
 
 /* --- Reset / base --- */
@@ -204,8 +207,14 @@ img { max-width: 100%; }
   .bg-glow { animation: none; }
   .reveal { opacity: 1 !important; transform: none !important; filter: none !important; animation: none !important; }
   .badge::before, .app-card.soon .app-icon { animation: none !important; }
+  .tooltip, .tooltip.out { animation: none !important; }
+  .seg-pill { transition: none !important; }
   * { transition-duration: 0.01ms !important; }
 }
+/* Mode « réduire les animations » (page Focus) : info-bulle instantanée,
+   pilule sans glissement. */
+.fx-reduce .tooltip, .fx-reduce .tooltip.out { animation: none !important; }
+.fx-reduce .seg-pill { transition: none !important; }
 
 /* --- Layout --- */
 .shell {
@@ -340,10 +349,11 @@ img { max-width: 100%; }
   transform: translateY(-5px) scale(1.03);
   border-color: color-mix(in srgb, var(--app-accent) 55%, transparent);
   background: var(--glass-strong);
-  /* Halo de survol : lueur projetée teintée de la couleur propre de l'app. */
+  /* Halo de survol : lueur projetée teintée de la couleur propre de l'app,
+     plus le listel « allumé » du verre SpotiKit. */
   box-shadow:
     0 24px 60px color-mix(in srgb, var(--app-accent) 13%, transparent),
-    var(--rim-light), var(--rim-edge);
+    var(--rim-hover), var(--rim-edge);
 }
 .app-card.soon { opacity: 0.55; cursor: default; }
 .app-num {
@@ -402,14 +412,16 @@ img { max-width: 100%; }
   transition: transform 0.4s var(--ease-spring), box-shadow 0.25s, background 0.25s, border-color 0.25s, opacity 0.2s, color 0.25s;
   user-select: none;
 }
-.btn:hover { transform: translateY(-2px) scale(1.02); border-color: rgba(242, 239, 231, 0.3); }
-.btn:active { transform: translateY(0) scale(0.98); }
+.btn:hover { transform: translateY(-2px) scale(1.02); border-color: rgba(242, 239, 231, 0.3); box-shadow: var(--rim-light); }
+/* Appui : le bouton s'enfonce net (SpotiKit : scale(.97)). */
+.btn:active { transform: translateY(0) scale(0.97); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 .btn-primary {
   background: var(--accent); border-color: var(--accent); color: var(--on-accent);
   box-shadow: 0 10px 30px rgba(255, 83, 16, 0.28);
 }
-.btn-primary:hover { box-shadow: 0 14px 38px rgba(255, 83, 16, 0.42); border-color: var(--accent); }
+/* Bouton principal : le halo s'étend au survol (SpotiKit : 8/24 px → 12/30 px). */
+.btn-primary:hover { box-shadow: 0 14px 38px rgba(255, 83, 16, 0.42), var(--rim-light); border-color: var(--accent); }
 .btn-ghost { background: transparent; }
 .btn-sm { padding: 0.42rem 0.85rem; font-size: 0.8rem; }
 
@@ -429,14 +441,21 @@ img { max-width: 100%; }
 .input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 83, 16, 0.22); }
 .input::placeholder { color: var(--ink-faint); }
 
-/* --- Animations d'apparition --- */
+/* --- Animations d'apparition « Rise » (SpotiKit : 40 px, flou 8 px,
+       échelle 0.98, 0.9 s) --- */
 .reveal {
   opacity: 0;
-  transform: translateY(16px) scale(0.985);
-  filter: blur(6px);
-  animation: rise 0.8s var(--ease) forwards;
+  transform: translateY(40px) scale(0.98);
+  filter: blur(8px);
+  animation: rise 0.9s var(--ease) forwards;
   animation-delay: var(--d, 0s);
 }
+/* Quand le JS est là (classe js-reveal posée par common.js), l'animation
+   attend que l'élément entre dans le champ : IntersectionObserver,
+   seuil 0.12, une seule fois (révélation au défilement SpotiKit).
+   Sans JS, l'apparition au chargement reste assurée par le CSS seul. */
+.js-reveal .reveal { animation-play-state: paused; }
+.js-reveal .reveal.in { animation-play-state: running; }
 @keyframes rise {
   to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
 }
@@ -486,6 +505,57 @@ img { max-width: 100%; }
   transition: transform 0.2s var(--ease), box-shadow 0.2s;
 }
 .toast .toast-action:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(255, 83, 16, 0.4); }
+
+/* --- Info-bulles « SpotiKit » (système délégué, posé par common.js) ---
+   Bulle de verre ancrée au pointeur (corrigée pour rester dans l'écran),
+   entrée nette + ressort, sortie rapide. Les attributs title de toutes
+   les pages migrent automatiquement vers data-tip : le natif disparaît,
+   la bulle custom le remplace, avec le même texte. */
+.tooltip-anchor { position: fixed; z-index: 300; pointer-events: none; }
+.tooltip {
+  color: var(--ink);
+  background: rgba(23, 21, 17, 0.94);
+  border: 1px solid var(--stroke-soft);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  box-shadow: var(--shadow), var(--rim-light);
+  border-radius: 10px;
+  padding: 6px 11px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.35;
+  white-space: normal;
+  max-width: min(72vw, 300px);
+  animation: tip-in 0.35s var(--ease-spring) forwards;
+}
+.tooltip.out { animation: tip-out 0.12s ease forwards; }
+@keyframes tip-in {
+  from { opacity: 0; transform: scale(0.94) translateY(var(--tip-y, 4px)); filter: blur(6px); }
+}
+@keyframes tip-out { to { opacity: 0; transform: scale(0.97); } }
+
+/* --- Pilule coulissante des contrôles segmentés (SpotiKit) ---
+   Une pastille de verre unique glisse derrière le segment actif
+   (ressort .34/1.56/.64/1) ; le segment actif passe en texte accent,
+   sans fond plein. Posée par common.js (.seg.pilled) : sans JS, le
+   style plein d'origine des apps reste en place. */
+.seg.pilled { position: relative; }
+.seg.pilled > button, .seg.pilled > .segbtn { position: relative; z-index: 1; }
+.seg-pill {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 0;
+  border-radius: 999px;
+  background: var(--glass-strong);
+  box-shadow: var(--rim-light), var(--rim-edge);
+  pointer-events: none;
+  z-index: 0; opacity: 0;
+  transition: left 0.35s var(--ease-spring), width 0.35s var(--ease-spring), opacity 0.2s ease;
+}
+.seg-pill.placed { opacity: 1; }
+.seg.pilled button.active, .seg.pilled .segbtn.on {
+  background: transparent; color: var(--accent);
+}
+.seg.pilled button.active .muted { color: var(--accent); opacity: 0.75; }
 
 /* --- Pied de page --- */
 .footer {

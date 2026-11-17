@@ -23,9 +23,9 @@ Site publié (GitHub Pages) : **https://arthurlenancker-boop.github.io/Lenancker
 ├── manifest.webmanifest        ← PWA (installable Android)
 ├── sw.js                       ← service worker (hors-ligne ; pré-cache tolérant : un asset raté ne casse pas le reste)
 ├── assets/
-│   ├── css/design.css          ← design system partagé (tokens, glass, animations)
+│   ├── css/design.css          ← design system partagé (tokens, glass, animations, interactions souris SpotiKit : rims allumés au survol, info-bulles, pilule des segmentés, révélation Rise)
 │   ├── js/apps.js              ← registre des apps (ajouter une app = 1 entrée ici)
-│   ├── js/common.js            ← toasts (avec action optionnelle), icônes SVG, enregistrement du SW, toast « mise à jour prête »
+│   ├── js/common.js            ← toasts (avec action optionnelle), icônes SVG, reflet du pointeur, info-bulles déléguées (title → data-tip), pilule coulissante des segmentés, révélation au défilement, enregistrement du SW, toast « mise à jour prête »
 │   ├── js/launcher.js          ← rendu de la grille d'accueil
 │   ├── fonts/                  ← Inter embarquée (woff2)
 │   ├── icons/                  ← icônes PWA (PNG 192/512/maskable, favicon SVG)
