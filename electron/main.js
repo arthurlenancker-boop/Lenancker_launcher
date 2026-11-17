@@ -6,7 +6,7 @@
    le rendu des maths et les exports dans le .exe. Sur app:// — schéma
    privilégié, sécurisé, fetch et stream — tout se comporte comme en PWA.
    En dev comme packagé, la racine servie est la même. */
-const { app, BrowserWindow, protocol, net } = require('electron');
+const { app, BrowserWindow, dialog, protocol, net } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
@@ -28,6 +28,49 @@ function serveApp(request) {
     return new Response('404', { status: 404 });
   }
   return net.fetch(pathToFileURL(full).toString());
+}
+
+/* Mise a jour automatique (electron-updater), installateur NSIS uniquement.
+   Au lancement, l'app lit latest.yml des Releases GitHub (genere par
+   electron-builder a chaque build) : si une version plus recente existe,
+   elle est telechargee en arriere-plan puis l'utilisateur choisit entre
+   installer immediatement ou a la fermeture. La version portable ne se met
+   pas a jour (limitation electron-updater) : la verification y est
+   desactivee. Tout echec reste silencieux : hors-ligne ou GitHub
+   injoignable ne doit jamais gener l'app. Les preversions ne declenchent
+   pas de mise a jour (canal « latest » uniquement). */
+function verifierMisesAJour() {
+  if (!app.isPackaged || process.env.PORTABLE_EXECUTABLE_DIR) return;
+  let autoUpdater;
+  try {
+    ({ autoUpdater } = require('electron-updater'));
+  } catch {
+    return;
+  }
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.setFeedURL({
+    provider: 'github',
+    owner: 'arthurlenancker-boop',
+    repo: 'Lenancker_launcher',
+  });
+  autoUpdater.on('error', () => {});
+  autoUpdater.on('update-downloaded', (info) => {
+    dialog
+      .showMessageBox({
+        type: 'info',
+        title: 'Mise à jour disponible',
+        message: 'La version ' + info.version + ' de Lenancker Launcher est prête.',
+        detail: "Vous pouvez installer maintenant, ou laisser l'application le faire à sa fermeture.",
+        buttons: ['Redémarrer et installer', 'Installer à la fermeture'],
+        defaultId: 0,
+        cancelId: 1,
+      })
+      .then(({ response }) => {
+        if (response === 0) autoUpdater.quitAndInstall(true, true);
+      });
+  });
+  autoUpdater.checkForUpdates().catch(() => {});
 }
 
 function createWindow() {
@@ -63,6 +106,7 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     protocol.handle('app', serveApp);
+    verifierMisesAJour();
     createWindow();
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();

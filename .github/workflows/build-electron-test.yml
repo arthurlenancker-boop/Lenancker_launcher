@@ -94,4 +94,7 @@ jobs:
               « Informations complémentaires → Exécuter quand même ».
             - Cette Release est un test supprimable sans risque ; la chaîne
               officielle est décrite dans la PR #9 (Release sur les tags v*).
-          files: dist/*.exe
+          files: |
+            dist/*.exe
+            dist/*.exe.blockmap
+            dist/latest.yml

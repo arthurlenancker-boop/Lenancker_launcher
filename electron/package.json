@@ -40,7 +40,10 @@
       }
     ],
     "win": {
-      "target": ["nsis", "portable"],
+      "target": [
+        "nsis",
+        "portable"
+      ],
       "icon": "../assets/icons/icon-512.png"
     },
     "nsis": {
@@ -50,5 +53,8 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Lenancker Launcher"
     }
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
   }
 }
