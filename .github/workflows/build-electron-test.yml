@@ -68,6 +68,25 @@ jobs:
         working-directory: electron
         run: npm run dist:win
 
+      # electron-updater telecharge l'installateur sous le nom exact inscrit
+      # dans latest.yml (espaces remplacees par des tirets), mais l'action de
+      # Release remplace les espaces des noms de fichiers par des points :
+      # les deux ne coincideraient jamais. On aligne donc les fichiers de
+      # dist/ sur l'URL de latest.yml avant la publication.
+      - name: Aligner les noms des .exe sur latest.yml
+        shell: pwsh
+        run: |
+          $yml = Get-Content dist/latest.yml -Raw
+          $url = [regex]::Match($yml, 'url:\s*(\S+)').Groups[1].Value
+          if (-not $url) { throw 'URL introuvable dans latest.yml' }
+          $setup = Get-ChildItem dist -Filter '*Setup*.exe' | Select-Object -First 1
+          Rename-Item $setup.FullName $url
+          Rename-Item "$($setup.FullName).blockmap" "$url.blockmap"
+          Get-ChildItem dist -Filter '*.exe' | Where-Object { $_.Name -ne $url } | ForEach-Object {
+            Rename-Item $_.FullName ($_.Name -replace ' ', '-')
+          }
+          Get-ChildItem dist | ForEach-Object { Write-Host $_.Name }
+
       - name: Publier les .exe en artefacts du run
         uses: actions/upload-artifact@v4
         with:
@@ -78,7 +97,7 @@ jobs:
       - name: Créer la Release de test avec les .exe
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: exe-test-2026-11-17
+          tag_name: exe-test-2026-11-17-v2
           name: Exe de test (compilation cloud)
           prerelease: true
           generate_release_notes: false
