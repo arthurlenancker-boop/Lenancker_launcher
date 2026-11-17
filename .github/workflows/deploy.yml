@@ -27,7 +27,7 @@ jobs:
       - name: Préparer le site statique
         run: |
           mkdir -p site
-          cp -r index.html manifest.webmanifest sw.js assets apps docs site/
+          cp -r index.html sync.html manifest.webmanifest sw.js assets apps docs site/
 
       # Build web officiel de WordCraft, servi sur la même origine que le
       # launcher : le protocole host (wordcraft:open / :save) exige la même
