@@ -1,5 +1,6 @@
 /* ============================================================
-   Galaxie — moteur Canvas 2D de la page d'accueil (index.html).
+   Galaxie — moteur Canvas 2D de la page de connexion (sync.html).
+   La grille des apps reste la page d'accueil (index.html + launcher.js).
    Mécanique de la reconstitution WebGL validée en maquette
    (source : page d'accueil reconstituée, galaxie rotative) :
    bras d'Archimède ×6 (1,05 tour), tapis roulant des cartes,
