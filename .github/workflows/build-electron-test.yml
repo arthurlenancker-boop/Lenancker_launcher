@@ -182,7 +182,7 @@ jobs:
   diag-linux:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -201,62 +201,90 @@ jobs:
         working-directory: electron
         run: npm install --no-audit --no-fund
 
-      - name: Test H accueil temoin
+      - name: Test J focus complet reproduction
         working-directory: electron
         shell: bash
         run: |
-          LENANCKER_URL='app://local/index.html' LENANCKER_EVENTS=ev-home.jsonl xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
+          LENANCKER_URL='app://local/apps/focus/index.html' LENANCKER_EVENTS=ev-j.jsonl xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
           sleep 3
-          DIAG_OUT=diag-v3-home timeout 60 node diag.js >/dev/null 2>&1 || true
+          DIAG_OUT=diag-v4-j timeout 60 node diag.js >/dev/null 2>&1 || true
           pkill -f electron || true
-          echo "::error::[H accueil temoin] diag=$(head -c 300 diag-v3-home.json 2>/dev/null || echo vide) ; events=$(tr '\n' '|' < ev-home.jsonl 2>/dev/null | head -c 300 || echo vide)"
+          echo "::error::[J focus complet] diag=$(jq -c . diag-v4-j.json 2>/dev/null | head -c 400 || echo vide) ; events=$(tr '\n' ';' < ev-j.jsonl 2>/dev/null | head -c 600 || echo vide)"
 
-      - name: Test F focus sans common.js
+      - name: Test O focus common.js seul
         working-directory: electron
         shell: bash
         run: |
-          sed -i 's|<script src="../../assets/js/common.js" defer></script>|<script defer>/* desactive */</script>|' ../apps/focus/index.html
-          LENANCKER_URL='app://local/apps/focus/index.html' LENANCKER_EVENTS=ev-nocommon.jsonl xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
+          sed -i -e 's|<script src="core.js" defer></script>|<script defer>/* off */</script>|' -e 's|<script src="focus.js" defer></script>|<script defer>/* off */</script>|' ../apps/focus/index.html
+          LENANCKER_URL='app://local/apps/focus/index.html' LENANCKER_EVENTS=ev-o.jsonl xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
           sleep 3
-          DIAG_OUT=diag-v3-nocommon timeout 60 node diag.js >/dev/null 2>&1 || true
+          DIAG_OUT=diag-v4-o timeout 60 node diag.js >/dev/null 2>&1 || true
           pkill -f electron || true
           git -C .. checkout -- apps/focus/index.html
-          echo "::error::[F focus sans common.js] diag=$(head -c 300 diag-v3-nocommon.json 2>/dev/null || echo vide) ; events=$(tr '\n' '|' < ev-nocommon.jsonl 2>/dev/null | head -c 500 || echo vide)"
+          echo "::error::[O focus common.js seul] diag=$(jq -c . diag-v4-o.json 2>/dev/null | head -c 400 || echo vide) ; events=$(tr '\n' ';' < ev-o.jsonl 2>/dev/null | head -c 600 || echo vide)"
 
-      - name: Test G focus sans aucun script
+      - name: Test K common.js apres toasts
         working-directory: electron
         shell: bash
         run: |
-          sed -i -e 's|<script src="../../assets/js/common.js" defer></script>|<script defer>/* off */</script>|' -e 's|<script src="core.js" defer></script>|<script defer>/* off */</script>|' -e 's|<script src="focus.js" defer></script>|<script defer>/* off */</script>|' ../apps/focus/index.html
-          LENANCKER_URL='app://local/apps/focus/index.html' LENANCKER_EVENTS=ev-noscript.jsonl xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
+          sed -i 's|  /\* --- Reflet du pointeur|  return; /* DIAG */\n  /* --- Reflet du pointeur|' ../assets/js/common.js
+          LENANCKER_URL='app://local/apps/focus/index.html' LENANCKER_EVENTS=ev-k.jsonl xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
           sleep 3
-          DIAG_OUT=diag-v3-noscript timeout 60 node diag.js >/dev/null 2>&1 || true
+          DIAG_OUT=diag-v4-k timeout 60 node diag.js >/dev/null 2>&1 || true
           pkill -f electron || true
-          git -C .. checkout -- apps/focus/index.html
-          echo "::error::[G focus sans script] diag=$(head -c 300 diag-v3-noscript.json 2>/dev/null || echo vide) ; events=$(tr '\n' '|' < ev-noscript.jsonl 2>/dev/null | head -c 500 || echo vide)"
+          git -C .. checkout -- assets/js/common.js
+          echo "::error::[K common.js stop apres toasts] diag=$(jq -c . diag-v4-k.json 2>/dev/null | head -c 400 || echo vide) ; events=$(tr '\n' ';' < ev-k.jsonl 2>/dev/null | head -c 600 || echo vide)"
 
-      - name: Test I focus sans script ni focus.css
+      - name: Test L common.js avec reflet pointeur
         working-directory: electron
         shell: bash
         run: |
-          sed -i -e 's|<script src="../../assets/js/common.js" defer></script>|<script defer>/* off */</script>|' -e 's|<script src="core.js" defer></script>|<script defer>/* off */</script>|' -e 's|<script src="focus.js" defer></script>|<script defer>/* off */</script>|' -e 's|<link rel="stylesheet" href="focus.css">|<link rel="stylesheet" href="data:text/css,">|' ../apps/focus/index.html
-          LENANCKER_URL='app://local/apps/focus/index.html' LENANCKER_EVENTS=ev-nofocuscss.jsonl xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
+          sed -i 's|  /\* --- Révélation au défilement|  return; /* DIAG */\n  /* --- Révélation au défilement|' ../assets/js/common.js
+          LENANCKER_URL='app://local/apps/focus/index.html' LENANCKER_EVENTS=ev-l.jsonl xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
           sleep 3
-          DIAG_OUT=diag-v3-nofocuscss timeout 60 node diag.js >/dev/null 2>&1 || true
+          DIAG_OUT=diag-v4-l timeout 60 node diag.js >/dev/null 2>&1 || true
           pkill -f electron || true
-          git -C .. checkout -- apps/focus/index.html
-          echo "::error::[I focus sans script ni focus.css] diag=$(head -c 300 diag-v3-nofocuscss.json 2>/dev/null || echo vide) ; events=$(tr '\n' '|' < ev-nofocuscss.jsonl 2>/dev/null | head -c 500 || echo vide)"
+          git -C .. checkout -- assets/js/common.js
+          echo "::error::[L common.js stop avant revelation] diag=$(jq -c . diag-v4-l.json 2>/dev/null | head -c 400 || echo vide) ; events=$(tr '\n' ';' < ev-l.jsonl 2>/dev/null | head -c 600 || echo vide)"
+
+      - name: Test M common.js avec revelation
+        working-directory: electron
+        shell: bash
+        run: |
+          sed -i 's|  /\* --- Info-bulles|  return; /* DIAG */\n  /* --- Info-bulles|' ../assets/js/common.js
+          LENANCKER_URL='app://local/apps/focus/index.html' LENANCKER_EVENTS=ev-m.jsonl xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
+          sleep 3
+          DIAG_OUT=diag-v4-m timeout 60 node diag.js >/dev/null 2>&1 || true
+          pkill -f electron || true
+          git -C .. checkout -- assets/js/common.js
+          echo "::error::[M common.js stop avant infobulles] diag=$(jq -c . diag-v4-m.json 2>/dev/null | head -c 400 || echo vide) ; events=$(tr '\n' ';' < ev-m.jsonl 2>/dev/null | head -c 600 || echo vide)"
+
+      - name: Test N common.js avec infobulles
+        working-directory: electron
+        shell: bash
+        run: |
+          sed -i 's|  /\* --- Pilule coulissante|  return; /* DIAG */\n  /* --- Pilule coulissante|' ../assets/js/common.js
+          LENANCKER_URL='app://local/apps/focus/index.html' LENANCKER_EVENTS=ev-n.jsonl xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
+          sleep 3
+          DIAG_OUT=diag-v4-n timeout 60 node diag.js >/dev/null 2>&1 || true
+          pkill -f electron || true
+          git -C .. checkout -- assets/js/common.js
+          echo "::error::[N common.js stop avant pilule] diag=$(jq -c . diag-v4-n.json 2>/dev/null | head -c 400 || echo vide) ; events=$(tr '\n' ';' < ev-n.jsonl 2>/dev/null | head -c 600 || echo vide)"
 
       - name: Attacher les resultats a la Release de test
         uses: softprops/action-gh-release@v2
         with:
           tag_name: exe-test-2026-11-17-v2
           files: |
-            electron/diag-v3-home.json
-            electron/diag-v3-nocommon.json
-            electron/diag-v3-noscript.json
-            electron/diag-v3-nofocuscss.json
-            electron/ev-home.jsonl
-            electron/ev-nocommon.jsonl
-            electron/ev-noscript.jsonl
-            electron/ev-nofocuscss.jsonl
+            electron/diag-v4-j.json
+            electron/diag-v4-o.json
+            electron/diag-v4-k.json
+            electron/diag-v4-l.json
+            electron/diag-v4-m.json
+            electron/diag-v4-n.json
+            electron/ev-j.jsonl
+            electron/ev-o.jsonl
+            electron/ev-k.jsonl
+            electron/ev-l.jsonl
+            electron/ev-m.jsonl
+            electron/ev-n.jsonl

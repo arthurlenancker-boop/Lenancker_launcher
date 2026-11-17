@@ -104,6 +104,8 @@ function createWindow() {
     win.webContents.on('render-process-gone', (e, d) => log('render-process-gone', { reason: d.reason, exitCode: d.exitCode }));
     win.webContents.on('unresponsive', () => log('unresponsive', {}));
     win.webContents.on('responsive', () => log('responsive', {}));
+    win.webContents.on('dom-ready', () => log('dom-ready', {}));
+    win.webContents.on('did-finish-load', () => log('did-finish-load', {}));
     win.webContents.on('did-fail-load', (e, code, desc, url, isMain) => log('did-fail-load', { code, desc, url }));
     win.webContents.on('console-message', (e, level, message, line, sourceId) => log('console', { level, message: String(message).slice(0, 300), source: String(sourceId).slice(0, 120), line }));
   }
