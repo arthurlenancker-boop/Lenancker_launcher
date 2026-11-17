@@ -182,7 +182,7 @@ jobs:
   diag-linux:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -201,42 +201,65 @@ jobs:
         working-directory: electron
         run: npm install --no-audit --no-fund
 
-      - name: Diagnostic devtools accueil
-        working-directory: electron
-        shell: bash
-        run: |
-          LENANCKER_URL='app://local/index.html' xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
-          sleep 3
-          DIAG_OUT=diag-linux-home node diag.js > diag-linux-home.log 2>&1 || true
-          cat diag-linux-home.log
-          pkill -f electron || true
-          if [ -f diag-linux-home.json ]; then
-            echo "::error::[LINUX accueil] $(head -c 900 diag-linux-home.json)"
-          else
-            echo "::error::[LINUX accueil] aucun resultat"
-          fi
+      - name: Serveur HTTP local du site
+        run: nohup python3 -m http.server 8123 >/dev/null 2>&1 &
 
-      - name: Diagnostic devtools Focus
+      - name: Test A focus via app
         working-directory: electron
         shell: bash
         run: |
           LENANCKER_URL='app://local/apps/focus/index.html' xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
-          sleep 3
-          DIAG_OUT=diag-linux-focus node diag.js > diag-linux-focus.log 2>&1 || true
-          cat diag-linux-focus.log
+          DIAG_OUT=diag-app-focus timeout 60 node diag.js >/dev/null 2>&1 || true
           pkill -f electron || true
-          if [ -f diag-linux-focus.json ]; then
-            echo "::error::[LINUX focus] $(head -c 900 diag-linux-focus.json)"
-          else
-            echo "::error::[LINUX focus] aucun resultat"
-          fi
+          echo "::error::[A app:// focus] $(jq -c . diag-app-focus.json 2>/dev/null | head -c 500 || echo 'aucun resultat')"
+
+      - name: Test B focus via http local
+        working-directory: electron
+        shell: bash
+        run: |
+          LENANCKER_URL='http://127.0.0.1:8123/apps/focus/index.html' xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
+          DIAG_OUT=diag-http-focus timeout 60 node diag.js >/dev/null 2>&1 || true
+          pkill -f electron || true
+          echo "::error::[B http:// focus] $(jq -c . diag-http-focus.json 2>/dev/null | head -c 500 || echo 'aucun resultat')"
+
+      - name: Test C focus via PWA en ligne
+        working-directory: electron
+        shell: bash
+        run: |
+          LENANCKER_URL='https://arthurlenancker-boop.github.io/Lenancker_launcher/apps/focus/index.html' xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
+          DIAG_OUT=diag-https-focus timeout 60 node diag.js >/dev/null 2>&1 || true
+          pkill -f electron || true
+          echo "::error::[C https PWA focus] $(jq -c . diag-https-focus.json 2>/dev/null | head -c 500 || echo 'aucun resultat')"
+
+      - name: Test D app:// focus sans focus.js
+        working-directory: electron
+        shell: bash
+        run: |
+          sed -i 's|<script src="focus.js" defer></script>|<script defer>window.__FOCUS_OFF = true;</script>|' ../apps/focus/index.html
+          LENANCKER_URL='app://local/apps/focus/index.html' xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
+          DIAG_OUT=diag-app-nofocus timeout 60 node diag.js >/dev/null 2>&1 || true
+          pkill -f electron || true
+          git -C .. checkout -- apps/focus/index.html
+          echo "::error::[D app:// sans focus.js] $(jq -c . diag-app-nofocus.json 2>/dev/null | head -c 500 || echo 'aucun resultat')"
+
+      - name: Test E app:// focus sans core.js
+        working-directory: electron
+        shell: bash
+        run: |
+          sed -i 's|<script src="core.js" defer></script>|<script defer>window.__CORE_OFF = true;</script>|' ../apps/focus/index.html
+          LENANCKER_URL='app://local/apps/focus/index.html' xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
+          DIAG_OUT=diag-app-nocore timeout 60 node diag.js >/dev/null 2>&1 || true
+          pkill -f electron || true
+          git -C .. checkout -- apps/focus/index.html
+          echo "::error::[E app:// sans core.js] $(jq -c . diag-app-nocore.json 2>/dev/null | head -c 500 || echo 'aucun resultat')"
 
       - name: Attacher les resultats a la Release de test
         uses: softprops/action-gh-release@v2
         with:
           tag_name: exe-test-2026-11-17-v2
           files: |
-            electron/diag-linux-home.json
-            electron/diag-linux-home.png
-            electron/diag-linux-focus.json
-            electron/diag-linux-focus.png
+            electron/diag-app-focus.json
+            electron/diag-http-focus.json
+            electron/diag-https-focus.json
+            electron/diag-app-nofocus.json
+            electron/diag-app-nocore.json
