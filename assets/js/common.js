@@ -170,7 +170,7 @@
          animations », la position suit le pointeur sans lissage.
          Desktop uniquement : pointeur fin capable de survol. --- */
   if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
-    const SPOT = '.app-card:not(.soon), .btn, .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn';
+    const SPOT = '.app-card:not(.soon), .btn, .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn, .chk, .rd, .dlg-remember, .toast-action';
     const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)');
     let el = null, raf = null;
     let tx = 0, ty = 0, cx = 0, cy = 0;

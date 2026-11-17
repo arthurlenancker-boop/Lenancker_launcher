@@ -142,18 +142,23 @@ img { max-width: 100%; }
        - Focus : .seg button (segmenté) ;
        - Révision : .deck-row (paquets), .vboite (boîtes de Leitner),
          .memo-card (carte à retourner) ;
-       - Probabilités : .segbtn (segmenté). --- */
-:is(.app-card:not(.soon), .btn, .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn) {
+       - Probabilités : .segbtn (segmenté), .chk (options),
+         .rd (Feuille / Développer) ;
+       - OCR : .dlg-remember (choix mémorisé) ;
+       - partout : .toast-action (bouton d'action des notifications).
+       Les champs de saisie sont exclus : les <input> ne portent pas de
+       pseudo-éléments et disposent déjà d'un traitement au focus. --- */
+:is(.app-card:not(.soon), .btn, .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn, .chk, .rd, .dlg-remember, .toast-action) {
   position: relative;
   overflow: hidden;
 }
-:is(.app-card:not(.soon), .btn, .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn)::after {
+:is(.app-card:not(.soon), .btn, .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn, .chk, .rd, .dlg-remember, .toast-action)::after {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  background: radial-gradient(circle var(--spot-r, 220px) at var(--mx, 50%) var(--my, 50%),
+  background: radial-gradient(circle var(--spot-r, 150px) at var(--mx, 50%) var(--my, 50%),
     color-mix(in srgb, var(--app-accent, var(--accent)) 16%, transparent) 0%,
     color-mix(in srgb, var(--app-accent, var(--accent)) 6%, transparent) 40%,
     transparent 70%);
@@ -163,13 +168,13 @@ img { max-width: 100%; }
 }
 /* Le liseré exclut les boutons en chargement : leur ::before est
    déjà le spinner (ocr.css). */
-:is(.app-card:not(.soon), .btn:not(.loading), .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn)::before {
+:is(.app-card:not(.soon), .btn:not(.loading), .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn, .chk, .rd, .dlg-remember, .toast-action)::before {
   content: '';
   position: absolute;
   inset: -1px;
   border-radius: inherit;
   padding: 1px;
-  background: radial-gradient(circle var(--spot-rb, 170px) at var(--mx, 50%) var(--my, 50%),
+  background: radial-gradient(circle var(--spot-rb, 110px) at var(--mx, 50%) var(--my, 50%),
     color-mix(in srgb, var(--app-accent, var(--accent)) 60%, transparent),
     transparent 70%);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
@@ -181,16 +186,17 @@ img { max-width: 100%; }
   transition: opacity 0.35s ease;
   z-index: 2;
 }
-:is(.app-card:not(.soon), .btn, .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn):hover::after,
-:is(.app-card:not(.soon), .btn:not(.loading), .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn):hover::before {
+:is(.app-card:not(.soon), .btn, .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn, .chk, .rd, .dlg-remember, .toast-action):hover::after,
+:is(.app-card:not(.soon), .btn:not(.loading), .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn, .chk, .rd, .dlg-remember, .toast-action):hover::before {
   opacity: 1;
 }
 /* Rayons des deux couches adaptés à la taille de chaque élément. */
-.vboite { --spot-r: 140px; --spot-rb: 120px; }
-.seg button, .segbtn { --spot-r: 90px; --spot-rb: 80px; }
+.vboite { --spot-r: 100px; --spot-rb: 80px; }
+.seg button, .segbtn { --spot-r: 70px; --spot-rb: 55px; }
+.chk, .rd, .dlg-remember, .toast-action { --spot-r: 60px; --spot-rb: 45px; }
 /* Mode « réduire les animations » (page Focus) : pas de reflet. */
-.fx-reduce :is(.app-card:not(.soon), .btn, .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn)::after,
-.fx-reduce :is(.app-card:not(.soon), .btn:not(.loading), .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn)::before {
+.fx-reduce :is(.app-card:not(.soon), .btn, .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn, .chk, .rd, .dlg-remember, .toast-action)::after,
+.fx-reduce :is(.app-card:not(.soon), .btn:not(.loading), .dropzone, .dlg-opt, .deck-row, .vboite, .memo-card, .seg button, .segbtn, .chk, .rd, .dlg-remember, .toast-action)::before {
   display: none;
 }
 
