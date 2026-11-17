@@ -37,7 +37,7 @@ Site publié (GitHub Pages) : **https://arthurlenancker-boop.github.io/Lenancker
 ├── docs/                       ← briefs de recherche (Focus/OCR) déployés avec le site
 ├── electron/                   ← wrapper Windows : main.js + package.json (electron-builder)
 ├── ml/ocr/                      ← pipeline d'entraînement du modèle OCR local (dataset synthétique, fine-tune TrOCR, évaluation, inférence — voir ml/ocr/README.md)
-└── .github/workflows/deploy.yml ← déploiement GitHub Pages sur push (main)
+└── .github/workflows/         ← deploy.yml : Pages sur push (main) ; tests.yml : CI ; build-electron.yml : .exe sur tag / à la demande
 ```
 
 ## Ajouter une app
@@ -89,6 +89,30 @@ npm run dist:win            # installateur NSIS + version portable dans ../dist/
 > `%LOCALAPPDATA%\electron-builder\Cache\winCodeSign\winCodeSign-2.6.0\`.
 > Résultat du build : `dist/Lenancker Launcher Setup 1.0.0.exe` (NSIS) et
 > `dist/Lenancker Launcher 1.0.0.exe` (portable).
+
+### Sans Windows : compilation par GitHub Actions
+
+Le workflow `.github/workflows/build-electron.yml` construit l'installateur
+NSIS et le portable sur un exécutant Windows, WordCraft embarqué inclus
+(même version épinglée + SHA256 que le déploiement Pages) :
+
+- **Livraison versionnée** : pousser un tag `v1.0.1` → la Release GitHub du
+  même nom reçoit les deux `.exe` (installateur + portable), version de
+  l'exécutable alignée sur le tag.
+- **Compilation à la demande** : onglet *Actions* → « Construire l'app
+  Windows (.exe) » → *Run workflow* → les `.exe` sont publiés en artefacts
+  du run (conservés 90 jours).
+
+- **Mise à jour automatique** : les applications installées (installateur
+  NSIS) vérifient au lancement les nouvelles versions via electron-updater
+  (`latest.yml` publié dans chaque Release). Une version plus récente est
+  téléchargée en arrière-plan, puis installée immédiatement ou à la
+  fermeture, au choix. La version **portable** ne se met pas à jour : il
+  faut télécharger un nouveau `.exe`. Les préversions ne déclenchent pas
+  de mise à jour (canal « latest » uniquement).
+
+L'exécutable n'est pas signé : au premier lancement, Windows SmartScreen
+peut demander « Informations complémentaires → Exécuter quand même ».
 
 ## Déploiement (GitHub Pages)
 

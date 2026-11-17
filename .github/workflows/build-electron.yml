@@ -1,0 +1,106 @@
+name: Construire l'app Windows (.exe)
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Installer Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Build web officiel de WordCraft, embarqué dans le .exe comme il l'est
+      # sur le site Pages (le protocole host exige la même origine). Version
+      # épinglée + somme SHA256 vérifiée ; en cas d'échec l'app se construit
+      # quand même et l'app OCR retombe sur l'éditeur distant.
+      - name: Intégrer le build web WordCraft (apps/wordcraft/)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ver = '0.18.1'
+          $rel = "https://github.com/storytold/wordcraft/releases/download/v$ver"
+          $zip = Join-Path $env:TEMP 'wordcraft-web.zip'
+          Invoke-WebRequest "${rel}/wordcraft-web-${ver}.zip" -OutFile $zip
+          Invoke-WebRequest "${rel}/SHA256SUMS.txt" -OutFile "$env:TEMP\SHA256SUMS.txt"
+          $expected = ((Select-String -Path "$env:TEMP\SHA256SUMS.txt" -Pattern "wordcraft-web-$ver\.zip$").Line -split '\s+')[0]
+          if (-not $expected) { throw "SHA256 introuvable pour wordcraft-web-$ver.zip" }
+          $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $expected.ToLower()) { throw "SHA256 invalide : $actual != $expected" }
+          $tmp = Join-Path $env:TEMP 'wordcraft-web'
+          Expand-Archive $zip -DestinationPath $tmp -Force
+          New-Item -ItemType Directory -Force apps/wordcraft | Out-Null
+          Copy-Item (Join-Path $tmp "wordcraft-web-$ver\*") apps/wordcraft/ -Recurse -Force
+          if (-not (Test-Path 'apps/wordcraft/index.html')) { throw 'index.html manquant' }
+          Write-Host "WordCraft $ver intégré"
+
+      # npm install et non npm ci : le package-lock.json du dépôt a été
+      # généré hors Windows et omet des paquets optionnels win32 (ex.
+      # electron-builder-squirrel-windows), ce que npm ci refuse sur un
+      # runner Windows (« Missing ... from lock file »). npm install
+      # complète l'arborescence sur place ; le build est identique.
+      - name: Installer les dépendances
+        working-directory: electron
+        run: npm install --no-audit --no-fund
+
+      # Sur un tag v1.0.1, l'exécutable porte cette version (au lieu du 1.0.0
+      # figé dans electron/package.json).
+      - name: Aligner la version sur le tag
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: electron
+        shell: bash
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version=process.argv[1];fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');console.log('version alignée :',process.argv[1]);" "$V"
+
+      - name: Construire l'installateur NSIS et le portable
+        working-directory: electron
+        run: npm run dist:win
+
+      # electron-updater telecharge l'installateur sous le nom exact inscrit
+      # dans latest.yml (espaces remplacees par des tirets), mais l'action de
+      # Release remplace les espaces des noms de fichiers par des points :
+      # les deux ne coincideraient jamais. On aligne donc les fichiers de
+      # dist/ sur l'URL de latest.yml avant la publication.
+      - name: Aligner les noms des .exe sur latest.yml
+        shell: pwsh
+        run: |
+          $yml = Get-Content dist/latest.yml -Raw
+          $url = [regex]::Match($yml, 'url:\s*(\S+)').Groups[1].Value
+          if (-not $url) { throw 'URL introuvable dans latest.yml' }
+          $setup = Get-ChildItem dist -Filter '*Setup*.exe' | Select-Object -First 1
+          Rename-Item $setup.FullName $url
+          Rename-Item "$($setup.FullName).blockmap" "$url.blockmap"
+          Get-ChildItem dist -Filter '*.exe' | Where-Object { $_.Name -ne $url } | ForEach-Object {
+            Rename-Item $_.FullName ($_.Name -replace ' ', '-')
+          }
+          Get-ChildItem dist | ForEach-Object { Write-Host $_.Name }
+
+      - name: Publier les .exe en artefacts du run
+        uses: actions/upload-artifact@v4
+        with:
+          name: lenancker-launcher-win-x64
+          path: dist/*.exe
+          if-no-files-found: error
+
+      - name: Créer la Release GitHub avec les .exe
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.exe
+            dist/*.exe.blockmap
+            dist/latest.yml
+          generate_release_notes: true
