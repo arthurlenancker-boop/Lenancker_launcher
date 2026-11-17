@@ -7,6 +7,7 @@
    privilégié, sécurisé, fetch et stream — tout se comporte comme en PWA.
    En dev comme packagé, la racine servie est la même. */
 const { app, BrowserWindow, dialog, protocol, net } = require('electron');
+const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
@@ -91,6 +92,21 @@ function createWindow() {
   /* Diagnostic : LENANCKER_URL ouvre une page precise (ex. une app) pour
      capturer sa console dans la CI. Toujours l'accueil en usage normal. */
   win.loadURL(process.env.LENANCKER_URL || 'app://local/index.html');
+
+  /* Diagnostic v3 : journaliser les evenements du processus de rendu
+     (blocage, crash, console) quand LENANCKER_EVENTS est defini. */
+  const diagLog = process.env.LENANCKER_EVENTS;
+  if (diagLog) {
+    const t0 = Date.now();
+    const log = (type, data) => {
+      try { fs.appendFileSync(diagLog, JSON.stringify(Object.assign({ t: Date.now() - t0, type }, data)) + '\n'); } catch (e) { /* diagnostic best effort */ }
+    };
+    win.webContents.on('render-process-gone', (e, d) => log('render-process-gone', { reason: d.reason, exitCode: d.exitCode }));
+    win.webContents.on('unresponsive', () => log('unresponsive', {}));
+    win.webContents.on('responsive', () => log('responsive', {}));
+    win.webContents.on('did-fail-load', (e, code, desc, url, isMain) => log('did-fail-load', { code, desc, url }));
+    win.webContents.on('console-message', (e, level, message, line, sourceId) => log('console', { level, message: String(message).slice(0, 300), source: String(sourceId).slice(0, 120), line }));
+  }
 }
 
 const gotLock = app.requestSingleInstanceLock();

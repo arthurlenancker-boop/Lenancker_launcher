@@ -201,65 +201,62 @@ jobs:
         working-directory: electron
         run: npm install --no-audit --no-fund
 
-      - name: Serveur HTTP local du site
-        run: nohup python3 -m http.server 8123 >/dev/null 2>&1 &
-
-      - name: Test A focus via app
+      - name: Test H accueil temoin
         working-directory: electron
         shell: bash
         run: |
-          LENANCKER_URL='app://local/apps/focus/index.html' xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
-          DIAG_OUT=diag-app-focus timeout 60 node diag.js >/dev/null 2>&1 || true
+          LENANCKER_URL='app://local/index.html' LENANCKER_EVENTS=ev-home.jsonl xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
+          sleep 3
+          DIAG_OUT=diag-v3-home timeout 60 node diag.js >/dev/null 2>&1 || true
           pkill -f electron || true
-          echo "::error::[A app:// focus] $(jq -c . diag-app-focus.json 2>/dev/null | head -c 500 || echo 'aucun resultat')"
+          echo "::error::[H accueil temoin] diag=$(head -c 300 diag-v3-home.json 2>/dev/null || echo vide) ; events=$(tr '\n' '|' < ev-home.jsonl 2>/dev/null | head -c 300 || echo vide)"
 
-      - name: Test B focus via http local
+      - name: Test F focus sans common.js
         working-directory: electron
         shell: bash
         run: |
-          LENANCKER_URL='http://127.0.0.1:8123/apps/focus/index.html' xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
-          DIAG_OUT=diag-http-focus timeout 60 node diag.js >/dev/null 2>&1 || true
-          pkill -f electron || true
-          echo "::error::[B http:// focus] $(jq -c . diag-http-focus.json 2>/dev/null | head -c 500 || echo 'aucun resultat')"
-
-      - name: Test C focus via PWA en ligne
-        working-directory: electron
-        shell: bash
-        run: |
-          LENANCKER_URL='https://arthurlenancker-boop.github.io/Lenancker_launcher/apps/focus/index.html' xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
-          DIAG_OUT=diag-https-focus timeout 60 node diag.js >/dev/null 2>&1 || true
-          pkill -f electron || true
-          echo "::error::[C https PWA focus] $(jq -c . diag-https-focus.json 2>/dev/null | head -c 500 || echo 'aucun resultat')"
-
-      - name: Test D app:// focus sans focus.js
-        working-directory: electron
-        shell: bash
-        run: |
-          sed -i 's|<script src="focus.js" defer></script>|<script defer>window.__FOCUS_OFF = true;</script>|' ../apps/focus/index.html
-          LENANCKER_URL='app://local/apps/focus/index.html' xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
-          DIAG_OUT=diag-app-nofocus timeout 60 node diag.js >/dev/null 2>&1 || true
+          sed -i 's|<script src="../../assets/js/common.js" defer></script>|<script defer>/* desactive */</script>|' ../apps/focus/index.html
+          LENANCKER_URL='app://local/apps/focus/index.html' LENANCKER_EVENTS=ev-nocommon.jsonl xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
+          sleep 3
+          DIAG_OUT=diag-v3-nocommon timeout 60 node diag.js >/dev/null 2>&1 || true
           pkill -f electron || true
           git -C .. checkout -- apps/focus/index.html
-          echo "::error::[D app:// sans focus.js] $(jq -c . diag-app-nofocus.json 2>/dev/null | head -c 500 || echo 'aucun resultat')"
+          echo "::error::[F focus sans common.js] diag=$(head -c 300 diag-v3-nocommon.json 2>/dev/null || echo vide) ; events=$(tr '\n' '|' < ev-nocommon.jsonl 2>/dev/null | head -c 500 || echo vide)"
 
-      - name: Test E app:// focus sans core.js
+      - name: Test G focus sans aucun script
         working-directory: electron
         shell: bash
         run: |
-          sed -i 's|<script src="core.js" defer></script>|<script defer>window.__CORE_OFF = true;</script>|' ../apps/focus/index.html
-          LENANCKER_URL='app://local/apps/focus/index.html' xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
-          DIAG_OUT=diag-app-nocore timeout 60 node diag.js >/dev/null 2>&1 || true
+          sed -i -e 's|<script src="../../assets/js/common.js" defer></script>|<script defer>/* off */</script>|' -e 's|<script src="core.js" defer></script>|<script defer>/* off */</script>|' -e 's|<script src="focus.js" defer></script>|<script defer>/* off */</script>|' ../apps/focus/index.html
+          LENANCKER_URL='app://local/apps/focus/index.html' LENANCKER_EVENTS=ev-noscript.jsonl xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
+          sleep 3
+          DIAG_OUT=diag-v3-noscript timeout 60 node diag.js >/dev/null 2>&1 || true
           pkill -f electron || true
           git -C .. checkout -- apps/focus/index.html
-          echo "::error::[E app:// sans core.js] $(jq -c . diag-app-nocore.json 2>/dev/null | head -c 500 || echo 'aucun resultat')"
+          echo "::error::[G focus sans script] diag=$(head -c 300 diag-v3-noscript.json 2>/dev/null || echo vide) ; events=$(tr '\n' '|' < ev-noscript.jsonl 2>/dev/null | head -c 500 || echo vide)"
+
+      - name: Test I focus sans script ni focus.css
+        working-directory: electron
+        shell: bash
+        run: |
+          sed -i -e 's|<script src="../../assets/js/common.js" defer></script>|<script defer>/* off */</script>|' -e 's|<script src="core.js" defer></script>|<script defer>/* off */</script>|' -e 's|<script src="focus.js" defer></script>|<script defer>/* off */</script>|' -e 's|<link rel="stylesheet" href="focus.css">|<link rel="stylesheet" href="data:text/css,">|' ../apps/focus/index.html
+          LENANCKER_URL='app://local/apps/focus/index.html' LENANCKER_EVENTS=ev-nofocuscss.jsonl xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
+          sleep 3
+          DIAG_OUT=diag-v3-nofocuscss timeout 60 node diag.js >/dev/null 2>&1 || true
+          pkill -f electron || true
+          git -C .. checkout -- apps/focus/index.html
+          echo "::error::[I focus sans script ni focus.css] diag=$(head -c 300 diag-v3-nofocuscss.json 2>/dev/null || echo vide) ; events=$(tr '\n' '|' < ev-nofocuscss.jsonl 2>/dev/null | head -c 500 || echo vide)"
 
       - name: Attacher les resultats a la Release de test
         uses: softprops/action-gh-release@v2
         with:
           tag_name: exe-test-2026-11-17-v2
           files: |
-            electron/diag-app-focus.json
-            electron/diag-http-focus.json
-            electron/diag-https-focus.json
-            electron/diag-app-nofocus.json
-            electron/diag-app-nocore.json
+            electron/diag-v3-home.json
+            electron/diag-v3-nocommon.json
+            electron/diag-v3-noscript.json
+            electron/diag-v3-nofocuscss.json
+            electron/ev-home.jsonl
+            electron/ev-nocommon.jsonl
+            electron/ev-noscript.jsonl
+            electron/ev-nofocuscss.jsonl
