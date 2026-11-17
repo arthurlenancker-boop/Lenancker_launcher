@@ -201,20 +201,44 @@ jobs:
         working-directory: electron
         run: npm install --no-audit --no-fund
 
-      - name: Test v6 etat complet pilule
+      - name: Test 1 focus corrige
         working-directory: electron
         shell: bash
         run: |
-          LENANCKER_URL='app://local/apps/focus/index.html' LENANCKER_EVENTS=ev-6.jsonl xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
+          LENANCKER_URL='app://local/apps/focus/index.html' LENANCKER_EVENTS=ev-7f.jsonl xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
           sleep 3
-          DIAG_OUT=diag-v6 timeout 60 node diag.js >/dev/null 2>&1 || true
+          DIAG_OUT=diag-v7-focus timeout 60 node diag.js >/dev/null 2>&1 || true
           pkill -f electron || true
-          echo "::error::[v6] diag=$(jq -c .problems diag-v6.json 2>/dev/null || echo vide)"
+          echo "::error::[1 focus corrige] diag=$(jq -c .problems diag-v7-focus.json 2>/dev/null || echo vide) png=$(test -f diag-v7-focus.png && echo oui || echo non)"
+
+      - name: Test 2 probabilites corrige
+        working-directory: electron
+        shell: bash
+        run: |
+          LENANCKER_URL='app://local/apps/probabilites/index.html' LENANCKER_EVENTS=ev-7p.jsonl xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
+          sleep 3
+          DIAG_OUT=diag-v7-proba timeout 60 node diag.js >/dev/null 2>&1 || true
+          pkill -f electron || true
+          echo "::error::[2 probabilites corrige] diag=$(jq -c .problems diag-v7-proba.json 2>/dev/null || echo vide) png=$(test -f diag-v7-proba.png && echo oui || echo non)"
+
+      - name: Test 3 accueil temoin
+        working-directory: electron
+        shell: bash
+        run: |
+          LENANCKER_URL='app://local/index.html' LENANCKER_EVENTS=ev-7h.jsonl xvfb-run -a npx electron . --disable-gpu --no-sandbox --remote-debugging-port=9222 &
+          sleep 3
+          DIAG_OUT=diag-v7-home timeout 60 node diag.js >/dev/null 2>&1 || true
+          pkill -f electron || true
+          echo "::error::[3 accueil temoin] diag=$(jq -c .problems diag-v7-home.json 2>/dev/null || echo vide) png=$(test -f diag-v7-home.png && echo oui || echo non)"
 
       - name: Attacher les resultats a la Release de test
         uses: softprops/action-gh-release@v2
         with:
           tag_name: exe-test-2026-11-17-v2
           files: |
-            electron/diag-v6.json
-            electron/ev-6.jsonl
+            electron/diag-v7-focus.json
+            electron/diag-v7-focus.png
+            electron/diag-v7-proba.json
+            electron/diag-v7-proba.png
+            electron/diag-v7-home.json
+            electron/diag-v7-home.png

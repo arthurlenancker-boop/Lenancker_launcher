@@ -362,17 +362,21 @@
          suivis par MutationObserver : aucun JS d'app à modifier. --- */
   (function () {
     const pilled = new Set();
-    /* DIAG v6 : etat complet a chaque pose (a retirer) */
-    let __placeCalls = 0, __rafCalls = 0;
 
     function place(seg) {
-      if (__placeCalls < 40) console.log('SEG:call:' + (__placeCalls) + ':' + (seg.id || seg.className));
-      __placeCalls++;
       const pill = seg.querySelector(':scope > .seg-pill');
       if (!pill) return;
-      if (__placeCalls <= 41) console.log('SEG:st:' + (seg.id || seg.className) + ':pill=[' + pill.className + ']:active=' + !!seg.querySelector('button.active, .segbtn.on') + ':parent=' + !!seg.offsetParent + ':seg=[' + seg.className + ']');
       const active = seg.querySelector('button.active, .segbtn.on');
-      if (!active || !seg.offsetParent) { pill.classList.remove('placed'); return; }
+      /* Ne retirer « placed » que si elle est vraiment presente : une
+         ecriture identique de l attribut class emet malgre tout un
+         enregistrement de MutationObserver dans Electron (Chromium 130),
+         ce qui entretient une boucle synchrone place() -> observateur ->
+         place() et fige le rendu de la page tant qu un segment est
+         masque (ex. minuteur de recompense). Garde identique sur add(). */
+      if (!active || !seg.offsetParent) {
+        if (pill.classList.contains('placed')) pill.classList.remove('placed');
+        return;
+      }
       const left = active.offsetLeft - seg.clientLeft;
       const width = active.offsetWidth;
       if (pill.classList.contains('placed')) {
@@ -385,10 +389,8 @@
       pill.style.left = `${left}px`;
       pill.style.width = `${width}px`;
       requestAnimationFrame(() => {
-        if (__rafCalls < 30) console.log('SEG:raf:' + (__rafCalls));
-        __rafCalls++;
         pill.style.transition = '';
-        pill.classList.add('placed');
+        if (!pill.classList.contains('placed')) pill.classList.add('placed');
       });
     }
 
@@ -403,21 +405,14 @@
       seg.classList.add('pilled');
       pilled.add(seg);
       place(seg);
-      new MutationObserver((muts) => {
-        if (__placeCalls < 40) {
-          for (const m of muts) console.log('SEG:rec:' + m.type + ':' + (m.attributeName || '') + ':' + (m.target.id || m.target.className || m.target.nodeName) + ':[' + (m.oldValue || '') + ']');
-        }
-        place(seg);
-      }).observe(seg, {
-        attributes: true, attributeFilter: ['class', 'hidden'], attributeOldValue: true,
+      new MutationObserver(() => place(seg)).observe(seg, {
+        attributes: true, attributeFilter: ['class', 'hidden'],
         childList: true, subtree: true,
       });
-      console.log('SEG:pillified:' + (seg.id || 'anon'));
     }
 
     function scan() { document.querySelectorAll('.seg').forEach(pillify); }
     scan();
-    console.log('SEG:scan-done');
     /* Segmentés créés après coup (dialogues OCR…) : équipés aussi. */
     let queued = false;
     new MutationObserver(() => {
@@ -427,7 +422,7 @@
     }).observe(document.body, { childList: true, subtree: true });
     /* Largeurs : les polices chargent, la fenêtre bouge. */
     const replaceAll = () => pilled.forEach(place);
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { console.log('SEG:fonts-ready'); replaceAll(); });
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(replaceAll);
     let rz = null;
     window.addEventListener('resize', () => {
       clearTimeout(rz);
