@@ -2,6 +2,10 @@
 (function () {
   'use strict';
 
+  /* JS présent : les apparitions « Rise » attendent d'entrer dans le champ
+     (révélation au défilement SpotiKit) ; sans JS, le CSS anime seul. */
+  if ('IntersectionObserver' in window) document.documentElement.classList.add('js-reveal');
+
   /* --- Icônes SVG inline (stroke courant) --- */
   const ICONS = {
     scan: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="7" y1="8" x2="13" y2="8"/><line x1="7" y1="16" x2="15" y2="16"/></svg>',
@@ -214,6 +218,208 @@
     }, { passive: true });
     document.documentElement.addEventListener('pointerleave', stop);
   }
+
+  /* --- Révélation au défilement « Rise » (SpotiKit) : le bloc monte de
+         40 px, flou qui se dissipe, et apparaît quand il entre à 12 % dans
+         le champ — une seule fois. Les éléments visibles au chargement
+         gardent leur cascade de délais (--d). --- */
+  (function () {
+    const io = new IntersectionObserver((entries) => {
+      for (const en of entries) {
+        if (en.isIntersecting) {
+          en.target.classList.add('in');
+          io.unobserve(en.target);
+        }
+      }
+    }, { threshold: 0.12 });
+    const scan = () => {
+      document.querySelectorAll('.reveal:not(.in)').forEach((el) => io.observe(el));
+    };
+    scan();
+    /* Les apps créent des éléments au fil de l'eau (file OCR, paquets…) :
+       on sonde les nouveautés, laissant le navigateur grouper les appels. */
+    let queued = false;
+    new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; scan(); });
+    }).observe(document.body, { childList: true, subtree: true });
+  })();
+
+  /* --- Info-bulles « SpotiKit » : délégation globale, souris uniquement.
+         Comportement observé sur spotikit.com :
+         - apparition retardée (500 ms), immédiate si une bulle vient d'être
+           montrée dans les 500 dernières ms (mémoire des infobulles
+           natives) ;
+         - masquage au clic, au défilement, à la touche Échap et au blur
+           de la fenêtre ;
+         - navigation clavier : un élément qui reçoit le focus clavier
+           (:focus-visible) montre sa bulle immédiatement ;
+         - entrée nette + ressort, sortie rapide, ancrage au pointeur
+           corrigé pour rester dans l'écran.
+         Tout attribut title devient data-tip (au chargement, puis au vol
+         pour les éléments créés après) : le navigateur n'affiche plus sa
+         bulle native, la nôtre la remplace avec le même texte. --- */
+  (function () {
+    function adopt(node) {
+      if (!(node instanceof Element)) return null;
+      const tipped = node.closest('[data-tip]');
+      if (tipped) return tipped;
+      const titled = node.closest('[title]');
+      if (titled) {
+        titled.dataset.tip = titled.getAttribute('title');
+        titled.removeAttribute('title');
+        return titled;
+      }
+      return null;
+    }
+    document.querySelectorAll('[title]').forEach((el) => {
+      el.dataset.tip = el.getAttribute('title');
+      el.removeAttribute('title');
+    });
+
+    let anchor = null, tip = null, shownFor = null, timer = null, shownAt = 0;
+    const DELAY = 500, MEMORY = 500, GAP = 14;
+
+    function hide() {
+      clearTimeout(timer);
+      timer = null;
+      if (!anchor) return;
+      const a = anchor, t = tip;
+      anchor = null; tip = null; shownFor = null;
+      t.classList.add('out');
+      setTimeout(() => a.remove(), 140);
+    }
+
+    function place(el, x, y) {
+      hide();
+      const text = el.dataset.tip || '';
+      if (!text) return;
+      anchor = document.createElement('div');
+      anchor.className = 'tooltip-anchor';
+      tip = document.createElement('div');
+      tip.className = 'tooltip';
+      tip.textContent = text;
+      anchor.appendChild(tip);
+      document.body.appendChild(anchor);
+      const w = tip.offsetWidth, h = tip.offsetHeight, m = 10;
+      let below = y < 56;
+      if (!below && y - GAP - h < 0) below = true;
+      const cx = Math.min(Math.max(x, m + w / 2), window.innerWidth - m - w / 2);
+      anchor.style.left = `${cx}px`;
+      anchor.style.top = below
+        ? `${Math.min(y, window.innerHeight - h - GAP)}px`
+        : `${y}px`;
+      anchor.style.transform = below
+        ? `translate(-50%, ${GAP}px)`
+        : `translate(-50%, calc(-100% - ${GAP}px))`;
+      tip.style.transformOrigin = below ? '50% 0%' : '50% 100%';
+      tip.style.setProperty('--tip-y', below ? '4px' : '-4px');
+      shownAt = Date.now();
+    }
+
+    if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+      document.addEventListener('pointerover', (e) => {
+        if (e.pointerType && e.pointerType !== 'mouse') return;
+        const t = adopt(e.target);
+        if (t !== shownFor) {
+          clearTimeout(timer);
+          if (t) {
+            const d = Date.now() - shownAt < MEMORY ? 0 : DELAY;
+            timer = setTimeout(() => place(t, e.clientX, e.clientY), d);
+          }
+          shownFor = t;
+        }
+      });
+      document.addEventListener('pointerout', (e) => {
+        const t = e.target instanceof Element ? e.target.closest('[data-tip]') : null;
+        const to = e.relatedTarget;
+        if (t && t === shownFor && !(to instanceof Node && t.contains(to))) {
+          clearTimeout(timer);
+          hide();
+        }
+      });
+      document.addEventListener('pointerdown', hide, true);
+      window.addEventListener('scroll', hide, { passive: true, capture: true });
+      window.addEventListener('blur', hide);
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hide(); });
+    }
+    /* Clavier : la bulle apparaît immédiatement au focus visible. */
+    document.addEventListener('focusin', (e) => {
+      const t = adopt(e.target);
+      if (t && t.matches(':focus-visible')) {
+        const r = t.getBoundingClientRect();
+        place(t, r.left + r.width / 2, r.bottom);
+      }
+    });
+    document.addEventListener('focusout', hide);
+  })();
+
+  /* --- Pilule coulissante des segmentés (SpotiKit : pastille unique qui
+         glisse derrière l'onglet actif, en ressort). Couvre les deux
+         familles du launcher : .seg > button (.active — Focus, OCR) et
+         .segbtn (.on — Probabilités). Les changements de classes sont
+         suivis par MutationObserver : aucun JS d'app à modifier. --- */
+  (function () {
+    const pilled = new Set();
+
+    function place(seg) {
+      const pill = seg.querySelector(':scope > .seg-pill');
+      if (!pill) return;
+      const active = seg.querySelector('button.active, .segbtn.on');
+      if (!active || !seg.offsetParent) { pill.classList.remove('placed'); return; }
+      const left = active.offsetLeft - seg.clientLeft;
+      const width = active.offsetWidth;
+      if (pill.classList.contains('placed')) {
+        pill.style.left = `${left}px`;
+        pill.style.width = `${width}px`;
+        return;
+      }
+      /* Première pose : sans glissement — la transition ne vient qu'après. */
+      pill.style.transition = 'none';
+      pill.style.left = `${left}px`;
+      pill.style.width = `${width}px`;
+      requestAnimationFrame(() => {
+        pill.style.transition = '';
+        pill.classList.add('placed');
+      });
+    }
+
+    function pillify(seg) {
+      if (seg.dataset.pilled === '1') return;
+      if (!seg.querySelector('button, .segbtn')) return;
+      seg.dataset.pilled = '1';
+      const pill = document.createElement('span');
+      pill.className = 'seg-pill';
+      pill.setAttribute('aria-hidden', 'true');
+      seg.appendChild(pill);
+      seg.classList.add('pilled');
+      pilled.add(seg);
+      place(seg);
+      new MutationObserver(() => place(seg)).observe(seg, {
+        attributes: true, attributeFilter: ['class', 'hidden'],
+        childList: true, subtree: true,
+      });
+    }
+
+    function scan() { document.querySelectorAll('.seg').forEach(pillify); }
+    scan();
+    /* Segmentés créés après coup (dialogues OCR…) : équipés aussi. */
+    let queued = false;
+    new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; scan(); });
+    }).observe(document.body, { childList: true, subtree: true });
+    /* Largeurs : les polices chargent, la fenêtre bouge. */
+    const replaceAll = () => pilled.forEach(place);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(replaceAll);
+    let rz = null;
+    window.addEventListener('resize', () => {
+      clearTimeout(rz);
+      rz = setTimeout(replaceAll, 120);
+    });
+  })();
 
   /* --- Service worker (PWA) : chemin résolu depuis le script lui-même,
          pour fonctionner aussi depuis apps/<slug>/ --- */
