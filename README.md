@@ -103,6 +103,14 @@ NSIS et le portable sur un exécutant Windows, WordCraft embarqué inclus
   Windows (.exe) » → *Run workflow* → les `.exe` sont publiés en artefacts
   du run (conservés 90 jours).
 
+- **Mise à jour automatique** : les applications installées (installateur
+  NSIS) vérifient au lancement les nouvelles versions via electron-updater
+  (`latest.yml` publié dans chaque Release). Une version plus récente est
+  téléchargée en arrière-plan, puis installée immédiatement ou à la
+  fermeture, au choix. La version **portable** ne se met pas à jour : il
+  faut télécharger un nouveau `.exe`. Les préversions ne déclenchent pas
+  de mise à jour (canal « latest » uniquement).
+
 L'exécutable n'est pas signé : au premier lancement, Windows SmartScreen
 peut demander « Informations complémentaires → Exécuter quand même ».
 
