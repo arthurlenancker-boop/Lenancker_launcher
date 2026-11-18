@@ -163,3 +163,89 @@ test('pullRecord/pushRecord : aucune requête sans session enregistrée', async 
   assert.strictEqual((await sync.pushRecord('revision', '{}')).ok, false);
   assert.strictEqual((await sync.pushRecord('revision', 'pas du json')).ok, false);
 });
+
+/* ---------- userId (comptes) ---------- */
+
+test('validateConfig : conserve userId quand il est présent', () => {
+  const out = sync.validateConfig({ server: 'https://s.fr', email: 'a@b.fr', token: 't', userId: ' u1 ' });
+  assert.strictEqual(out.userId, 'u1');
+});
+
+test('validateConfig : userId absent ou vide simplement omis (sessions anciennes)', () => {
+  const out = sync.validateConfig({ server: 'https://s.fr', email: 'a@b.fr', token: 't', userId: '' });
+  assert.ok(!('userId' in out));
+  const out2 = sync.validateConfig({ server: 'https://s.fr', email: 'a@b.fr', token: 't' });
+  assert.ok(!('userId' in out2));
+});
+
+/* ---------- decidePull (changement de compte) ---------- */
+
+test('decidePull : sans métadonnées → pull (premier échange du compte)', () => {
+  assert.strictEqual(sync.decidePull(null, 0), 'pull');
+  assert.strictEqual(sync.decidePull(undefined, 100), 'pull');
+});
+
+test('decidePull : même compte → même logique que decideSync', () => {
+  assert.strictEqual(sync.decidePull({ syncedAtMs: 2000, userId: 'a' }, 1000, 'a'), 'none');
+  assert.strictEqual(sync.decidePull({ syncedAtMs: 1000, userId: 'a' }, 2000, 'a'), 'pull');
+});
+
+test('decidePull : compte différent du dernier échange → pull, même sans changement serveur', () => {
+  assert.strictEqual(sync.decidePull({ syncedAtMs: 5000, userId: 'a' }, 1000, 'b'), 'pull');
+});
+
+test('decidePull : anciennes métadonnées sans userId compatibles avec les sessions sans userId', () => {
+  assert.strictEqual(sync.decidePull({ syncedAtMs: 2000 }, 1000), 'none');
+  assert.strictEqual(sync.decidePull({ syncedAtMs: 1000 }, 2000), 'pull');
+});
+
+/* ---------- registerError (messages de création de compte) ---------- */
+
+test('registerError : 400 e-mail déjà pris', () => {
+  const msg = sync.registerError(400, { data: { email: { message: 'Value must be unique' } } });
+  assert.strictEqual(msg, 'Cette adresse e-mail a déjà un compte — connecte-toi.');
+});
+
+test('registerError : 400 e-mail invalide', () => {
+  const msg = sync.registerError(400, { data: { email: { message: 'Value must be a valid email address' } } });
+  assert.strictEqual(msg, 'Adresse e-mail invalide.');
+});
+
+test('registerError : 400 mot de passe trop court', () => {
+  const msg = sync.registerError(400, { data: { password: { message: 'The value length must be at least 8 characters.' } } });
+  assert.strictEqual(msg, 'Mot de passe trop court (8 caractères minimum).');
+});
+
+test('registerError : 400 confirmation différente', () => {
+  const msg = sync.registerError(400, { data: { passwordConfirm: { message: 'Values do not match.' } } });
+  assert.strictEqual(msg, 'Les deux mots de passe ne correspondent pas.');
+});
+
+test('registerError : 403 inscription fermée, autre statut générique, 400 vide générique', () => {
+  assert.strictEqual(sync.registerError(403, null), 'Inscription pas encore ouverte sur ce serveur — réessaie plus tard.');
+  assert.ok(sync.registerError(500, null).startsWith('Inscription impossible'));
+  assert.ok(sync.registerError(400, { data: {} }).startsWith('Inscription impossible'));
+});
+
+/* ---------- gardes des nouveaux appels réseau ---------- */
+
+test('register : gardes sans e-mail, mot de passe, ou confirmation différente', async () => {
+  assert.strictEqual((await sync.register('', 'a@b.fr', 'x', 'x')).ok, false);
+  assert.strictEqual((await sync.register('https://s.fr', '', 'x', 'x')).ok, false);
+  assert.strictEqual((await sync.register('https://s.fr', 'a@b.fr', '', '')).ok, false);
+  assert.strictEqual((await sync.register('https://s.fr', 'a@b.fr', 'abcdef12', 'autre')).ok, false);
+});
+
+test('refresh/logout : aucun renouvellement sans session, déconnexion locale sûre', async () => {
+  assert.strictEqual((await sync.refresh()).ok, false);
+  assert.strictEqual(await sync.logout(), false);
+});
+
+test('wasSkipped/markSkipped : gardes sans localStorage (Node)', () => {
+  assert.strictEqual(sync.wasSkipped(), false);
+  assert.strictEqual(sync.markSkipped(), false);
+});
+
+test('SKIP_KEY exposé', () => {
+  assert.strictEqual(sync.SKIP_KEY, 'lenancker.sync.skipped');
+});
