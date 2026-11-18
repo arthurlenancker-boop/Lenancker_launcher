@@ -175,5 +175,98 @@
     return h > 0 ? `${h}:${p(m)}:${p(sec)}` : `${p(m)}:${p(sec)}`;
   }
 
-  return { createEngine, pointsFor, dayKey, computeStreak, last7Days, formatMs, MIN };
+  /* ---------- Synchronisation (PocketBase, clé « focus ») ----------
+     Document unique de sync_records regroupant réglages, intention,
+     sessions et série. Fonctions pures, testées sous Node : le pont de
+     l'app (sync-bridge.js) s'en sert, l'app et son stockage restent
+     inchangés. Fusion : sessions par union sans doublon (clé ts, même
+     règle que l'import), série par union des jours, réglages et
+     intention pris du côté qui a changé en dernier (savedAtMs). */
+  const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+  function sanitizeSyncSession(s) {
+    if (!s || typeof s !== 'object') return null;
+    const ts = Number(s.ts);
+    if (!Number.isFinite(ts) || ts <= 0) return null;
+    return {
+      ts,
+      focusMs: Math.max(0, Number(s.focusMs) || 0),
+      distractions: Math.max(0, Math.floor(Number(s.distractions) || 0)),
+      mode: s.mode === 'pomodoro' ? 'pomodoro' : 'flux',
+      segments: Math.max(0, Math.floor(Number(s.segments) || 0)),
+    };
+  }
+
+  function normalizeSyncIntent(intent) {
+    const o = intent && typeof intent === 'object' ? intent : {};
+    return {
+      task: typeof o.task === 'string' ? o.task.slice(0, 200) : '',
+      ifThen: typeof o.ifThen === 'string' ? o.ifThen.slice(0, 200) : '',
+      reward: typeof o.reward === 'string' ? o.reward.slice(0, 200) : '',
+    };
+  }
+
+  function normalizeSyncDoc(doc) {
+    const d = doc && typeof doc === 'object' ? doc : {};
+    const sessions = [];
+    if (Array.isArray(d.sessions)) {
+      for (const s of d.sessions) {
+        const clean = sanitizeSyncSession(s);
+        if (clean) sessions.push(clean);
+      }
+      sessions.sort((a, b) => a.ts - b.ts);
+    }
+    const days = {};
+    if (d.days && typeof d.days === 'object') {
+      for (const k of Object.keys(d.days)) if (DAY_KEY_RE.test(k)) days[k] = true;
+    }
+    return {
+      v: 1,
+      settings: d.settings && typeof d.settings === 'object' ? d.settings : {},
+      intent: normalizeSyncIntent(d.intent),
+      sessions,
+      days,
+      savedAtMs: Math.max(0, Math.floor(Number(d.savedAtMs) || 0)),
+    };
+  }
+
+  function buildSyncDoc(parts, savedAtMs) {
+    const p = parts || {};
+    return normalizeSyncDoc({
+      settings: p.settings,
+      intent: p.intent,
+      sessions: p.sessions,
+      days: p.days,
+      savedAtMs: savedAtMs,
+    });
+  }
+
+  /* Local gagne à égalité d'ancienneté ; à ts égal, la session
+     déjà connue localement est conservée et l'autre ignorée
+     (même embryon que l'import : sans doublon). */
+  function mergeSyncDocs(localDoc, remoteDoc) {
+    const a = normalizeSyncDoc(localDoc);
+    const b = normalizeSyncDoc(remoteDoc);
+    const sessions = a.sessions.slice();
+    const seen = new Set(sessions.map((s) => s.ts));
+    for (const s of b.sessions) {
+      if (!seen.has(s.ts)) {
+        sessions.push(s);
+        seen.add(s.ts);
+      }
+    }
+    sessions.sort((x, y) => x.ts - y.ts);
+    const days = Object.assign({}, a.days, b.days);
+    const fresh = b.savedAtMs > a.savedAtMs ? b : a;
+    return {
+      v: 1,
+      settings: Object.assign({}, fresh.settings),
+      intent: Object.assign({}, fresh.intent),
+      sessions,
+      days,
+      savedAtMs: Math.max(a.savedAtMs, b.savedAtMs),
+    };
+  }
+
+  return { createEngine, pointsFor, dayKey, computeStreak, last7Days, formatMs, MIN, sanitizeSyncSession, normalizeSyncIntent, normalizeSyncDoc, buildSyncDoc, mergeSyncDocs };
 });
