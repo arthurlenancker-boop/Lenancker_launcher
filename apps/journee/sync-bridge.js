@@ -76,7 +76,11 @@ function pushState(ms){
 /* Adoption au démarrage : le plus frais l'emporte. */
 function adopt(){
   api.pullRecord(SYNC_KEY).then(function(res){
-    if(!res.ok){ fail(res); return; }
+    /* À l'issue de l'adoption, le sondage repart de l'état local
+       réconcilié : seul un changement ultérieur part au serveur (plus
+       le premier contenu créé en session, cf. poll). */
+    var solder = function(){ lastSeen = baseline = stateRaw(); ready = true; };
+    if(!res.ok){ fail(res); solder(); return; }
     if(res.empty){
       /* Serveur vide : si l'appareil possède un état (quiz et devoirs saisis
          avant ce pont), c'est lui qui ouvre la synchronisation. */
@@ -87,6 +91,7 @@ function adopt(){
           if(out.ok){ api.saveMeta(SYNC_KEY, { syncedAtMs: out.updatedMs }); }
         }, function(){ /* silencieux */ });
       }
+      solder();
       return;
     }
     var env = parseOr(res.value);
@@ -100,27 +105,29 @@ function adopt(){
       storage.set(LS_STAMP, String(remoteMs));
       api.saveMeta(SYNC_KEY, { syncedAtMs: res.updatedMs });
       location.reload();
-    }else if(remoteMs < localStamp && stateRaw() !== null){
+      solder();
+      return;
+    }
+    if(remoteState && remoteMs < localStamp && stateRaw() !== null){
       /* Cet appareil a le plus frais (éditions hors ligne) : il envoie. */
       pushState(localStamp).then(function(out){
         if(out.ok){ api.saveMeta(SYNC_KEY, { syncedAtMs: out.updatedMs }); }
       }, function(){ /* silencieux */ });
     }
-  }).catch(function(){ /* silencieux : mode local */ });
+    solder();
+  }).catch(function(){ /* silencieux : mode local */ 
+    lastSeen = baseline = stateRaw(); ready = true; });
 }
 
-/* Envoi opportuniste : l'état part dès qu'il change, avec réessai
-   au cycle suivant si l'envoi échoue pour le réseau. */
+/* Envoi opportuniste : l'état part dès qu'il change, y compris la
+   première apparition de contenu après le chargement (quiz terminé
+   en session), avec réessai au cycle suivant si l'envoi échoue pour
+   le réseau. */
 var lastSeen = null;
 var baseline = null;
 var pushing = false;
-function poll(){
-  if(pushing){ return; }
-  var v = stateRaw();
-  if(v === null){ return; }
-  if(lastSeen === null){ lastSeen = v; baseline = v; return; }
-  if(v === lastSeen){ return; }
-  lastSeen = v;
+var ready = false;
+function envoyer(v, premiereFois){
   var ms = Date.now();
   storage.set(LS_STAMP, String(ms));
   pushing = true;
@@ -132,13 +139,29 @@ function poll(){
       fail(res);
       baseline = v; /* pas de nouvel essai tant que le problème dure */
     }else{
-      lastSeen = baseline; /* réseau en berne : réessai au prochain cycle */
+      lastSeen = premiereFois ? null : baseline; /* réseau en berne : réessai au prochain cycle */
     }
     pushing = false;
   }, function(){
-    lastSeen = baseline; /* réseau en berne : réessai au prochain cycle */
+    lastSeen = premiereFois ? null : baseline; /* réseau en berne : réessai au prochain cycle */
     pushing = false;
   });
+}
+function poll(){
+  if(!ready || pushing){ return; }
+  var v = stateRaw();
+  if(v === null){ return; }
+  if(lastSeen === null){
+    /* Première observation : un contenu qui apparaît (quiz terminé
+       après le chargement) part immédiatement ; un état sans contenu
+       reste local. */
+    lastSeen = v; baseline = v;
+    if(hasContent(parseOr(v))){ envoyer(v, true); }
+    return;
+  }
+  if(v === lastSeen){ return; }
+  lastSeen = v;
+  envoyer(v, false);
 }
 
 adopt();
