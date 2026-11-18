@@ -1,7 +1,7 @@
 /* Service worker du Lenancker Launcher.
    Stratégie : cache-first pour les assets statiques (le launcher doit
    rester utilisable hors-ligne), réseau direct pour l'API Mistral. */
-const VERSION = 'lenancker-v40';
+const VERSION = 'lenancker-v41';
 /* Cache pérenne de l'éditeur WordCraft embarqué (apps/wordcraft/) :
    vécu à travers les bumps de VERSION, pour ne pas re-télécharger ~60 Mo. */
 const WC_CACHE = 'lenancker-wordcraft';
@@ -71,6 +71,7 @@ const CORE = [
   'apps/revision/revision.css',
   'apps/revision/core.js',
   'apps/revision/revision.js',
+  'apps/revision/sync-bridge.js',
   'apps/probabilites/',
   'apps/probabilites/index.html',
   'apps/probabilites/probabilites.css',
