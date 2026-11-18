@@ -147,20 +147,6 @@
     </footer>
   </main>
 
-  <!-- WordCraft embarqué : l'éditeur web officiel (auto-hébergé par le launcher,
-       même origine) reçoit le document via le protocole host (?host=parent),
-       le construit dans son moteur et rend les sauvegardes à la page. -->
-  <div class="wc-overlay hidden" id="wc-overlay" role="dialog" aria-modal="true" aria-label="WordCraft — éditeur de document">
-    <div class="wc-bar">
-      <strong>WordCraft</strong>
-      <span class="small muted" id="wc-status">chargement de l&rsquo;éditeur…</span>
-      <span class="grow"></span>
-      <span class="small" id="wc-dirty" hidden>modifications non enregistrées</span>
-      <button class="btn btn-ghost btn-sm" id="wc-close" type="button">Fermer (Échap)</button>
-    </div>
-    <iframe id="wc-frame" class="wc-frame" title="WordCraft — traitement de texte" src="about:blank" allow="clipboard-read; clipboard-write; fullscreen"></iframe>
-  </div>
-
   <!-- KaTeX (CSS+JS), docx et md2docx sont chargés à la demande par ocr.js,
        seulement si le document contient des maths ou lors d'un export .docx. -->
   <script src="../../assets/js/common.js" defer></script>
