@@ -2,6 +2,16 @@
 (function () {
   'use strict';
 
+  /* Première ouverture : si aucune session de synchronisation
+     n'existe encore sur cet appareil (et que l'utilisateur n'a pas
+     choisi de passer), la page Sync est présentée pour se connecter
+     ou créer un compte. Le badge Sync reste toujours disponible. */
+  var syncApi = window.LenanckerSync;
+  if (syncApi && !syncApi.loadConfig() && !syncApi.wasSkipped()) {
+    window.location.replace('sync.html');
+    return;
+  }
+
   document.getElementById('brand-logo').innerHTML = window.iconSvg('grid');
 
   /* Bandeau défilant : on répète le contenu jusqu'à couvrir la largeur

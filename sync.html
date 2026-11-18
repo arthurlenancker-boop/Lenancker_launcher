@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Lenancker Launcher — Synchronisation</title>
-<meta name="description" content="Connexion au serveur de synchronisation privé du Lenancker Launcher (PocketBase + Tailscale). Le mot de passe n'est jamais stocké."/>
+<meta name="description" content="Connexion ou création de compte pour la synchronisation des données d'études du Lenancker Launcher. Le mot de passe n'est jamais stocké."/>
 <meta name="robots" content="noindex"/>
 <meta name="theme-color" content="#0f0e0b"/>
 <link rel="icon" href="assets/icons/favicon.svg" type="image/svg+xml"/>
@@ -12,8 +12,10 @@
 <link rel="manifest" href="manifest.webmanifest"/>
 <style>
 /* Page de connexion à la synchronisation — la grille des apps reste
-   la page d'accueil (index.html). Maquette galaxie validée, adaptée :
-   thème sombre seul, HUD en bas du hero, carte de connexion au centre. */
+   la page d'accueil (index.html). Maquette galaxie validée : thème
+   sombre seul, HUD en bas du hero, carte de connexion au centre.
+   La page ne montre aucune information de serveur : l'adresse est
+   fixée par assets/js/sync.js, seul le compte est demandé. */
 @font-face{font-family:'Inter';font-style:normal;font-weight:400;font-display:swap;src:url('assets/fonts/inter-400.woff2') format('woff2')}
 @font-face{font-family:'Inter';font-style:normal;font-weight:500;font-display:swap;src:url('assets/fonts/inter-500.woff2') format('woff2')}
 @font-face{font-family:'Inter';font-style:normal;font-weight:600;font-display:swap;src:url('assets/fonts/inter-600.woff2') format('woff2')}
@@ -67,8 +69,6 @@ nav.site{position:fixed;top:0;left:0;right:0;z-index:50;background:color-mix(in 
 #hero h1{position:relative;margin-top:2rem;font-family:var(--font-display);font-weight:500;font-size:1.875rem;line-height:1.05;letter-spacing:-.03em;color:var(--ink-strong)}
 @media (min-width:640px){#hero h1{font-size:2.25rem}}
 #hero .lede{position:relative;margin-top:1rem;max-width:28rem;font-size:1.125rem;line-height:1.7;color:var(--muted)}
-.cta-row{pointer-events:auto;position:relative;margin-top:1.5rem;display:flex;flex-direction:column;gap:.75rem;width:100%;max-width:24rem;align-items:center}
-@media (min-width:640px){.cta-row{flex-direction:row;max-width:none;justify-content:center}}
 .btn{display:inline-flex;width:-moz-fit-content;width:fit-content;align-items:center;justify-content:center;gap:.5rem;font-family:var(--font-mono);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.12em;white-space:nowrap;padding:0 1.5rem;height:3rem;transition:all .15s;cursor:pointer}
 .btn.ghost{border:1px solid var(--line-strong);background:var(--bg);color:var(--ink)}
 .btn.ghost:hover{border-color:transparent}
@@ -89,6 +89,10 @@ nav.site{position:fixed;top:0;left:0;right:0;z-index:50;background:color-mix(in 
 .sync-passrow .sync-input{flex:1;min-width:0}
 #syncEye{background:none;border:1px solid var(--line);color:var(--muted);padding:0 .65rem;cursor:pointer;transition:color .2s,border-color .2s}
 #syncEye:hover{color:var(--ink);border-color:var(--line-strong)}
+.mode-row{display:flex;gap:.25rem;background:var(--bg-sunken);border:1px solid var(--line);padding:.2rem}
+.mode-btn{flex:1;background:none;border:1px solid transparent;color:var(--muted);font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;padding:.45rem 0;cursor:pointer;transition:color .2s,background .2s,border-color .2s}
+.mode-btn:hover{color:var(--ink)}
+.mode-btn.active{background:var(--bg-raised);color:var(--ink-strong);border-color:var(--line-strong)}
 .sync-actions{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.25rem}
 .sync-actions .btn{height:2.5rem;font-size:10px;flex:1;min-width:-moz-fit-content;min-width:fit-content}
 .btn.primary{background:var(--invert-bg);color:var(--invert-fg)}
@@ -96,6 +100,10 @@ nav.site{position:fixed;top:0;left:0;right:0;z-index:50;background:color-mix(in 
 #syncStatus{min-height:1rem;color:var(--muted);white-space:pre-line}
 #syncStatus.ok{color:#7bc47f}
 #syncStatus.err{color:#ff6a54}
+#loggedEmail{font-weight:600;overflow-wrap:anywhere}
+.skip-link{margin-top:.4rem;color:var(--faint);font-size:.8rem;text-align:center;transition:color .2s;padding:.25rem 0}
+.skip-link:hover{color:var(--muted)}
+[hidden]{display:none!important}
 
 @media (prefers-reduced-motion:reduce){
   .wm-letter{animation:none!important;opacity:1!important;transform:none!important}
@@ -138,32 +146,45 @@ nav.site{position:fixed;top:0;left:0;right:0;z-index:50;background:color-mix(in 
             <div class="wordmark" role="img" aria-label="LENANCKER"><span class="wm-letter" data-i="0" style="padding-right:.04em"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="display:inline-block;width:.82em;height:.82em;vertical-align:-.02em"><rect x="3" y="3" width="8" height="8" rx="2.2" opacity="0.55"/><rect x="13" y="3" width="8" height="8" rx="2.2" opacity="0.55"/><rect x="3" y="13" width="8" height="8" rx="2.2" opacity="0.55"/><rect x="13" y="13" width="8" height="8" rx="2.2"/></svg></span><span class="wm-letter" data-i="1">E</span><span class="wm-letter" data-i="2">N</span><span class="wm-letter" data-i="3">A</span><span class="wm-letter" data-i="4">N</span><span class="wm-letter" data-i="5">C</span><span class="wm-letter" data-i="6">K</span><span class="wm-letter" data-i="7">E</span><span class="wm-letter" data-i="8">R</span></div>
           </div>
           <h1 class="reveal">Tes données d'études, synchronisées.</h1>
-          <p class="lede reveal">Connecte le launcher à ton serveur privé (PocketBase sur le PC Ubuntu, accessible par Tailscale) pour retrouver tes données sur ton téléphone et ton ordinateur.</p>
+          <p class="lede reveal">Crée un compte ou connecte-toi : tes données d'études te suivent d'un appareil à l'autre. Hors connexion, rien ne change — le launcher fonctionne toujours en local.</p>
           <p class="hud-label reveal" style="color:var(--faint)">Clique une icône de la galaxie pour ouvrir une app</p>
-          <div class="cta-row reveal">
-            <a class="btn ghost" href="./">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
-              Retour au launcher</a>
-          </div>
           <div class="sync-card reveal" id="syncCard">
             <div class="panel-head">
               <p class="hud-label" style="color:var(--muted)">Synchronisation</p>
-              <p class="hud-label" style="color:var(--faint)">Réseau privé · Tailscale</p>
+              <p class="hud-label" style="color:var(--faint)">Compte personnel</p>
             </div>
-            <p class="hud-label sync-lab">Serveur</p>
-            <input class="sync-input" id="syncServer" type="url" spellcheck="false" autocomplete="off" placeholder="https://pcarthur-1.tailda0234.ts.net">
-            <p class="hud-label sync-lab">E-mail</p>
-            <input class="sync-input" id="syncEmail" type="email" autocomplete="username" placeholder="ton@email.fr">
-            <p class="hud-label sync-lab">Mot de passe</p>
-            <div class="sync-passrow">
-              <input class="sync-input" id="syncPass" type="password" autocomplete="current-password" placeholder="••••••••">
-              <button type="button" id="syncEye" class="hud-label" aria-label="Afficher ou masquer le mot de passe">afficher</button>
+            <div class="mode-row" id="modeRow" role="tablist" aria-label="Mode de la carte">
+              <button type="button" class="mode-btn active" id="modeLogin" role="tab" aria-selected="true">Connexion</button>
+              <button type="button" class="mode-btn" id="modeSignup" role="tab" aria-selected="false">Créer un compte</button>
             </div>
-            <div class="sync-actions">
-              <button type="button" id="syncConnect" class="btn primary">Se connecter</button>
-              <button type="button" id="syncTest" class="btn ghost">Tester</button>
+            <div id="formBox">
+              <p class="hud-label sync-lab">E-mail</p>
+              <input class="sync-input" id="syncEmail" type="email" autocomplete="username" placeholder="ton@email.fr">
+              <p class="hud-label sync-lab">Mot de passe</p>
+              <div class="sync-passrow">
+                <input class="sync-input" id="syncPass" type="password" autocomplete="current-password" placeholder="••••••••">
+                <button type="button" id="syncEye" class="hud-label" aria-label="Afficher ou masquer le mot de passe">afficher</button>
+              </div>
+              <div id="confirmBox" hidden>
+                <p class="hud-label sync-lab">Confirme le mot de passe</p>
+                <div class="sync-passrow">
+                  <input class="sync-input" id="syncPass2" type="password" autocomplete="new-password" placeholder="••••••••">
+                </div>
+              </div>
+              <div class="sync-actions">
+                <button type="button" id="syncSubmit" class="btn primary">Se connecter</button>
+              </div>
+            </div>
+            <div id="loggedBox" hidden>
+              <p class="hud-label" style="color:var(--faint)">Connecté</p>
+              <p id="loggedEmail"></p>
+              <div class="sync-actions">
+                <a class="btn primary" href="./">Ouvrir le launcher</a>
+                <button type="button" id="syncLogout" class="btn ghost">Se déconnecter</button>
+              </div>
             </div>
             <p class="hud-label" id="syncStatus" aria-live="polite"></p>
+            <a id="syncSkip" href="./" class="skip-link">Continuer sans synchroniser →</a>
           </div>
         </div>
       </div>
@@ -175,7 +196,8 @@ nav.site{position:fixed;top:0;left:0;right:0;z-index:50;background:color-mix(in 
 <script src="assets/js/galaxy.js" defer></script>
 <script src="assets/js/sync.js" defer></script>
 <script>
-/* Câblage de la page de connexion : service worker, révélation, carte sync.
+/* Câblage de la carte de connexion : service worker, révélation,
+   modes connexion / création de compte, session existante.
    Les scripts defer sont chargés avant DOMContentLoaded. */
 document.addEventListener('DOMContentLoaded', function(){
   'use strict';
@@ -200,40 +222,81 @@ document.addEventListener('DOMContentLoaded', function(){
   var sync = window.LenanckerSync;
   if(!sync){ return; }
   var btn = el('syncBtn'), card = el('syncCard'), dot = el('syncDot'), status = el('syncStatus');
-  var F = { server: el('syncServer'), email: el('syncEmail'), pass: el('syncPass') };
-  var cfg = sync.loadConfig() || {};
-  F.server.value = cfg.server || sync.DEFAULT_SERVER;
-  F.email.value = cfg.email || '';
+  var formBox = el('formBox'), loggedBox = el('loggedBox'), confirmBox = el('confirmBox'), modeRow = el('modeRow');
+  var F = { email: el('syncEmail'), pass: el('syncPass'), pass2: el('syncPass2') };
+  var submit = el('syncSubmit'), modeLogin = el('modeLogin'), modeSignup = el('modeSignup'), skip = el('syncSkip');
+  var mode = 'login';
   function setStatus(t, cls){ status.textContent = t; status.className = 'hud-label' + (cls ? ' ' + cls : ''); }
   function setDot(s){ dot.className = 'sync-dot' + (s ? ' ' + s : ''); }
-  if(cfg.token){
-    setDot('ok');
-    setStatus('Connecté — la synchronisation est active.');
+
+  function setMode(m){
+    mode = m;
+    var login = m === 'login';
+    modeLogin.classList.toggle('active', login);
+    modeSignup.classList.toggle('active', !login);
+    modeLogin.setAttribute('aria-selected', login ? 'true' : 'false');
+    modeSignup.setAttribute('aria-selected', login ? 'false' : 'true');
+    confirmBox.hidden = login;
+    F.pass.setAttribute('autocomplete', login ? 'current-password' : 'new-password');
+    submit.textContent = login ? 'Se connecter' : 'Créer mon compte';
+    F.pass2.value = '';
+    setStatus('');
   }
+  function showLogged(cfg){
+    modeRow.hidden = true;
+    formBox.hidden = true;
+    skip.hidden = true;
+    loggedBox.hidden = false;
+    el('loggedEmail').textContent = cfg.email;
+    setDot('ok');
+    setStatus('La synchronisation est active sur cet appareil.');
+  }
+  setMode('login');
+  var cfg = sync.loadConfig();
+  if(cfg && cfg.token){ showLogged(cfg); }
+
+  modeLogin.addEventListener('click', function(){ setMode('login'); F.email.focus(); });
+  modeSignup.addEventListener('click', function(){ setMode('signup'); F.email.focus(); });
   btn.addEventListener('click', function(){
-    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setTimeout(function(){ F.email.focus(); }, 400);
+    card.scrollIntoView({ behavior:'smooth', block:'center' });
+    setTimeout(function(){ if(!formBox.hidden){ F.email.focus(); } }, 400);
   });
   el('syncEye').addEventListener('click', function(){
     var show = F.pass.type === 'password';
     F.pass.type = show ? 'text' : 'password';
+    if(!confirmBox.hidden){ F.pass2.type = show ? 'text' : 'password'; }
     this.textContent = show ? 'masquer' : 'afficher';
   });
-  el('syncTest').addEventListener('click', function(){
-    setDot('busy'); setStatus('Test en cours…');
-    sync.testServer(F.server.value).then(function(res){
-      if(res.ok){ setDot('ok'); setStatus('Serveur joignable — PocketBase répond.'); }
-      else{ setDot('err'); setStatus(res.error, 'err'); }
-    });
+  function afterSuccess(msg){
+    setStatus(msg, 'ok');
+    setDot('ok');
+    setTimeout(function(){ window.location.href = './'; }, 900);
+  }
+  submit.addEventListener('click', function(){
+    if(mode === 'login'){
+      setDot('busy'); setStatus('Connexion…');
+      sync.connect(sync.DEFAULT_SERVER, F.email.value, F.pass.value).then(function(res){
+        if(res.ok){ F.pass.value = ''; afterSuccess('Connecté — ouverture du launcher…'); }
+        else{ setDot('err'); setStatus(res.error, 'err'); }
+      });
+    }else{
+      setDot('busy'); setStatus('Création du compte…');
+      sync.register(sync.DEFAULT_SERVER, F.email.value, F.pass.value, F.pass2.value).then(function(res){
+        if(res.ok){ F.pass.value = ''; F.pass2.value = ''; afterSuccess('Compte créé — ouverture du launcher…'); }
+        else{ setDot('err'); setStatus(res.error, 'err'); }
+      });
+    }
   });
-  el('syncConnect').addEventListener('click', function(){
-    sync.connect(F.server.value, F.email.value, F.pass.value).then(function(res){
-      if(res.ok){
-        F.pass.value = ''; setDot('ok'); setStatus('Connecté — les apps peuvent synchroniser.');
-      }else{
-        setDot('err'); setStatus(res.error, 'err');
-      }
-    });
+  [F.email, F.pass, F.pass2].forEach(function(input){
+    input.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ submit.click(); } });
+  });
+  el('syncLogout').addEventListener('click', function(){
+    sync.logout().then(function(){ window.location.reload(); });
+  });
+  skip.addEventListener('click', function(e){
+    e.preventDefault();
+    sync.markSkipped();
+    window.location.href = './';
   });
 });
 </script>
