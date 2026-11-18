@@ -1,10 +1,13 @@
 /* Registre des applications du launcher.
    Pour ajouter une app : créer apps/<slug>/index.html puis l'ajouter ici.
    galaxyIcon : SVG autonome (data URI) affiché par la galaxie de la page
-   d'accueil — versions haute résolution avec dégradé et contour. */
+   d'accueil — versions haute résolution avec dégradé et contour.
+   featured: true donne à la carte la forme vedette de l'accueil
+   (bandeau pleine largeur, horizontal). */
 window.LENANCKER_APPS = [
   {
     slug: 'ocr',
+    featured: true,
     name: 'OCR Mistral',
     desc: "Extrais le texte de tes images et PDF (cours, scans, fiches) via l'API Mistral OCR : Markdown copiable, export LibreOffice Writer .odt éditable ou HTML riche à coller dans ton traitement de texte. Scans annotés au stylo : le manuscrit est repéré, puis séparé, ignoré ou transcrit selon tes préférences, mémorisées.",
     icon: 'scan',
@@ -38,6 +41,7 @@ window.LENANCKER_APPS = [
   },
   {
     slug: 'probabilites',
+    featured: true,
     name: 'Arbre de probabilité',
     desc: "Dessine pas à pas un arbre de probabilité pondéré (jusqu'à 4 niveaux) : nomme l'expérience, chaque événement et son contraire (barre ou accent au-dessus de la lettre), choisis pour chaque branche « feuille » ou « développer », puis saisis à la main probabilités et résultats des chemins — l'outil ne calcule jamais rien, il ne fait que dessiner. Feuille blanche style manuel de maths, présence (probabilités au milieu des branches, feuilles alignées à droite), case « Total des issues » en option, exports PNG (≈ 300 dpi) et SVG, et réutilisation comme modèle (structure gardée, valeurs vidées).",
     icon: 'arbre',
@@ -46,22 +50,4 @@ window.LENANCKER_APPS = [
     accent: '#9ec1ff',
     status: 'disponible',
     href: 'apps/probabilites/index.html',
-  },
-  {
-    /* WordCraft, build web officiel auto-hébergé par le launcher
-       (apps/wordcraft/, intégré par le workflow de déploiement — version
-       épinglée, somme SHA256 vérifiée). Servi sur la même origine que le
-       site, il est pilotable par l'app OCR (protocole host) qui y construit
-       les documents recréés par l'IA ; une fois chargé, le service worker
-       le garde en cache pour un usage hors-ligne. */
-    slug: 'wordcraft',
-    name: 'WordCraft',
-    desc: "Traitement de texte complet, gratuit et open source, servi par le launcher lui-même (build web officiel, même origine) : ruban, styles, tableaux, suivi des modifications, sommaires et citations, export .docx/.odt/PDF. Quand l'app OCR écrit un document — reconstruction IA, OCR fidèle ou extraction directe — WordCraft le construit : l'éditeur embarqué de l'app l'ouvre, le monte dans son moteur et rend chaque sauvegarde à la page ; cette carte l'ouvre aussi à la main. Le document ne quitte jamais la machine : tout tourne en local.",
-    icon: 'doc',
-    galaxyIcon: 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22256%22%20height%3D%22256%22%20viewBox%3D%220%200%20256%20256%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22b%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23b998ff%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%238d70c9%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%22256%22%20height%3D%22256%22%20rx%3D%2252%22%20fill%3D%22url(%23b)%22%2F%3E%3Crect%20x%3D%221.5%22%20y%3D%221.5%22%20width%3D%22253%22%20height%3D%22253%22%20rx%3D%2250.5%22%20fill%3D%22none%22%20stroke%3D%22rgba(15%2C14%2C11%2C.28)%22%20stroke-width%3D%223%22%2F%3E%3Cg%20transform%3D%22translate(40%2040)%20scale(7.3333)%22%20fill%3D%22none%22%20stroke%3D%22%230f0e0b%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M15%203H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8z%22%2F%3E%3Cpath%20d%3D%22M15%203v5h5%22%2F%3E%3Cpath%20d%3D%22M8%2013h8%22%2F%3E%3Cpath%20d%3D%22M8%2017h5%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E',
-    tint: 'rgba(177, 140, 255, 0.12)',
-    accent: '#b18cff',
-    status: 'disponible',
-    href: 'apps/wordcraft/',
-  },
-];
+  }];

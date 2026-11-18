@@ -1,10 +1,7 @@
 /* Service worker du Lenancker Launcher.
    Stratégie : cache-first pour les assets statiques (le launcher doit
    rester utilisable hors-ligne), réseau direct pour l'API Mistral. */
-const VERSION = 'lenancker-v44';
-/* Cache pérenne de l'éditeur WordCraft embarqué (apps/wordcraft/) :
-   vécu à travers les bumps de VERSION, pour ne pas re-télécharger ~60 Mo. */
-const WC_CACHE = 'lenancker-wordcraft';
+const VERSION = 'lenancker-v45';
 const CORE = [
   './',
   'index.html',
@@ -103,9 +100,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      /* WC_CACHE reste d'une version à l'autre : l'éditeur embarqué
-         (~60 Mo de WebAssembly) ne se re-télécharge pas à chaque bump. */
-      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION && k !== WC_CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -116,23 +111,6 @@ self.addEventListener('fetch', (event) => {
   // API Mistral et toute ressource cross-origin : réseau uniquement
   if (url.origin !== self.location.origin) return;
   if (event.request.method !== 'GET') return;
-
-  /* Fichiers de l'éditeur WordCraft embarqué : cache dédié et pérenne
-     (les noms d'assets portent un hash de contenu — immuables). */
-  if (url.pathname.indexOf('/apps/wordcraft/') !== -1) {
-    event.respondWith(
-      caches.open(WC_CACHE).then((cache) =>
-        cache.match(event.request, { ignoreSearch: true }).then((cached) => {
-          const fetched = fetch(event.request).then((response) => {
-            if (response && response.ok) cache.put(event.request, response.clone());
-            return response;
-          }).catch(() => cached);
-          return cached || fetched;
-        })
-      )
-    );
-    return;
-  }
 
   event.respondWith(
     caches.match(event.request, { ignoreSearch: true }).then((cached) => {

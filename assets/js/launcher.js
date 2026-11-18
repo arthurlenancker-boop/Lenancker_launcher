@@ -42,17 +42,13 @@
 
   apps.forEach((app, i) => {
     const isSoon = app.status !== 'disponible';
-    const featured = i === 0 && !isSoon;
+    /* Forme vedette de l'accueil (bandeau pleine largeur) : drapeau
+       de l'entrée dans apps.js, plusieurs cartes peuvent l'avoir. */
+    const featured = !!app.featured && !isSoon;
     const card = document.createElement(isSoon ? 'div' : 'a');
     if (!isSoon) {
       card.href = app.href;
       card.setAttribute('aria-label', `Ouvrir ${app.name}`);
-      /* App externe (ex. WordCraft) : nouvel onglet — la PWA installée
-         du launcher reste ouverte en arrière-plan. */
-      if (app.external) {
-        card.target = '_blank';
-        card.rel = 'noopener noreferrer';
-      }
     }
     card.className = `app-card reveal${isSoon ? ' soon' : ''}${featured ? ' featured' : ''}`;
     card.style.setProperty('--d', `${0.34 + i * 0.09}s`);
