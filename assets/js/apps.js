@@ -18,6 +18,18 @@ window.LENANCKER_APPS = [
     href: 'apps/ocr/index.html',
   },
   {
+    slug: 'journee',
+    name: 'Journée',
+    desc: "Ta journée calée sur ta biologie. Un quiz sans IA à la première ouverture (classe au lycée, spés selon le niveau, horaires réels) puis chaque créneau découle de la chronobiologie : inertie du sommeil au réveil, cartes du matin, devoirs exigeants d'abord et matières entrelacées en blocs de 45 min, pause active au creux post-déjeuner, rappel du soir juste avant le coucher, durée de nuit affichée face à la recommandation 8-10 h. Fondé sur le brief recherche docs/recherche-journee-chronobiologie.md.",
+    icon: 'jour',
+    galaxyIcon: 'data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"256\" viewBox=\"0 0 256 256\"><defs><linearGradient id=\"b\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#c7a8ff\"/><stop offset=\"1\" stop-color=\"#8d6cd4\"/></linearGradient></defs><rect width=\"256\" height=\"256\" rx=\"52\" fill=\"url(#b)\"/><rect x=\"1.5\" y=\"1.5\" width=\"253\" height=\"253\" rx=\"50.5\" fill=\"none\" stroke=\"rgba(15,14,11,.28)\" stroke-width=\"3\"/><g transform=\"translate(40 40) scale(7.3333)\" fill=\"none\" stroke=\"#0f0e0b\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 17h16\"/><path d=\"M12 13a4 4 0 0 0 4-4 4 4 0 0 0-8 .5h4\"/><path d=\"M5 3.5 6.2 5.6M19 3.5 17.8 5.6M12 2.5V4.5\"/></g></svg>',
+    tint: 'rgba(183, 156, 255, 0.12)',
+    accent: '#b79cff',
+    status: 'disponible',
+    href: 'apps/journee/index.html',
+  },
+
+  {
     slug: 'focus',
     name: 'Focus',
     desc: "Sessions de concentration calibrées TDA/H & TSA d'après la littérature scientifique : mode Flux (pause quand le flow casse, jamais d'horloge imposée), temps toujours visible, bruit blanc/rose/marron, pauses actives, body doubling local, plan « si-alors » et récompense liée à ton centre d'intérêt.",

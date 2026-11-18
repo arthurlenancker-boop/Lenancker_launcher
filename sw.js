@@ -1,7 +1,7 @@
 /* Service worker du Lenancker Launcher.
    Stratégie : cache-first pour les assets statiques (le launcher doit
    rester utilisable hors-ligne), réseau direct pour l'API Mistral. */
-const VERSION = 'lenancker-v46';
+const VERSION = 'lenancker-v47';
 const CORE = [
   './',
   'index.html',
@@ -76,8 +76,15 @@ const CORE = [
   'apps/probabilites/core.js',
   'apps/probabilites/probabilites.js',
   'apps/probabilites/sync-bridge.js',
+  'apps/journee/',
+  'apps/journee/index.html',
+  'apps/journee/journee.css',
+  'apps/journee/core.js',
+  'apps/journee/journee.js',
+  'apps/journee/sync-bridge.js',
   'docs/recherche-focus-tda-tsa.md',
   'docs/recherche-revision-memoisation.md',
+  'docs/recherche-journee-chronobiologie.md',
 ];
 
 self.addEventListener('install', (event) => {
