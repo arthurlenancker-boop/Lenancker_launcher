@@ -12,8 +12,8 @@
      const locale ; galaxyIcon en priorité sur icon ;
    - les cartes sont cliquables : un clic ouvre l'app (app.href) ;
      le curseur passe en main au survol ;
-   - le HUD affiche le nom de l'app survolée à la place des
-     coordonnées polaires.
+   - le HUD en bas du hero n'affiche pas de coordonnées polaires :
+     un seul élément, le logo de l'app survolée (galaxyIcon).
 
    Architecture optimisée :
    - sous-jacent précalculé en Path2D : zéro géométrie reconstruite par frame ;
@@ -425,23 +425,18 @@
       drawCard(c,alpha,blur,aber,1+warp);
     }
 
-    /* HUD coordonnées (seulement au-dessus du hero) */
+    /* HUD logo : le logo de l'app survolée, aucune coordonnée */
     if(coordhud){
-      const inHero=S.pointer.on&&px>=0&&px<=W&&py>=0&&py<=H;
-      if(inHero){
-        let txt;
-        if(hoverI>=0&&cards[hoverI]){
-          /* survol d'une carte : nom de l'app, invitation au clic */
-          const app=APPS[cards[hoverI].clip];
-          txt = app ? app.name+' — clic pour ouvrir' : '';
-        }else{
-          const dd=Math.hypot(px-L.cx,py-L.cy);
-          txt='r '+String(Math.round(dd)).padStart(4,'0')
-            +' · θ '+String(Math.round(((Math.atan2(py-L.cy,px-L.cx)*180/Math.PI)+360)%360)).padStart(3,'0')+'°';
-        }
-        if(txt!=='' && coordhud.textContent!==txt){ coordhud.textContent=txt; }
-        coordhud.style.opacity = txt!=='' ? '.85' : '0';
-      }else{ coordhud.style.opacity='0'; }
+      const app = hoverI>=0&&cards[hoverI] ? APPS[cards[hoverI].clip] : null;
+      const src = app ? (app.galaxyIcon||app.icon) : '';
+      if(src && coordhud.dataset.src!==src){
+        coordhud.dataset.src = src;
+        coordhud.textContent = '';
+        const img=document.createElement('img');
+        img.src=src; img.alt='';
+        coordhud.appendChild(img);
+      }
+      coordhud.style.opacity = src ? '.9' : '0';
     }
   }
 
