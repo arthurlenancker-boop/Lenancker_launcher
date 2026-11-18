@@ -1,7 +1,7 @@
 /* Service worker du Lenancker Launcher.
    Stratégie : cache-first pour les assets statiques (le launcher doit
    rester utilisable hors-ligne), réseau direct pour l'API Mistral. */
-const VERSION = 'lenancker-v42';
+const VERSION = 'lenancker-v43';
 /* Cache pérenne de l'éditeur WordCraft embarqué (apps/wordcraft/) :
    vécu à travers les bumps de VERSION, pour ne pas re-télécharger ~60 Mo. */
 const WC_CACHE = 'lenancker-wordcraft';
@@ -66,6 +66,7 @@ const CORE = [
   'apps/focus/focus.css',
   'apps/focus/core.js',
   'apps/focus/focus.js',
+  'apps/focus/sync-bridge.js',
   'apps/revision/',
   'apps/revision/index.html',
   'apps/revision/revision.css',
@@ -77,6 +78,7 @@ const CORE = [
   'apps/probabilites/probabilites.css',
   'apps/probabilites/core.js',
   'apps/probabilites/probabilites.js',
+  'apps/probabilites/sync-bridge.js',
   'docs/recherche-focus-tda-tsa.md',
   'docs/recherche-revision-memoisation.md',
 ];
