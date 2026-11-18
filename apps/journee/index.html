@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Journée — Lenancker Launcher</title>
+  <meta name="description" content="Ta journée calée sur ta biologie : après un quiz sans IA (classe, spécialités selon le niveau, horaires réels), chaque créneau découle de la chronobiologie — inertie du sommeil, cartes du matin, devoirs exigéants en premier et matières entrelacées, rappel du soir avant le coucher.">
+  <meta name="theme-color" content="#0f0e0b">
+  <link rel="icon" type="image/svg+xml" href="../../assets/icons/favicon.svg">
+  <link rel="apple-touch-icon" href="../../assets/icons/apple-touch-icon.png">
+  <link rel="manifest" href="../../manifest.webmanifest">
+  <link rel="stylesheet" href="../../assets/css/design.css">
+  <link rel="stylesheet" href="journee.css">
+</head>
+<body>
+  <div class="bg" aria-hidden="true">
+    <div class="bg-grid"></div>
+    <div class="bg-glow"></div>
+    <div class="bg-grain"></div>
+  </div>
+
+  <main class="shell">
+    <header class="topbar reveal" style="--d:.05s">
+      <a class="brand" href="../../index.html">
+        <span class="brand-logo" aria-hidden="true" id="brand-logo"></span>
+        <span class="brand-name">Journée<em>lenancker launcher</em></span>
+      </a>
+      <a class="btn btn-ghost btn-sm" href="../../index.html">← Launcher</a>
+    </header>
+
+    <!-- Quiz de première ouverture : déterministe, sans IA -->
+    <section class="glass panel reveal quiz" id="quiz" style="--d:.15s" hidden aria-labelledby="h-quiz">
+      <div class="panel-head">
+        <h2 id="h-quiz">Bienvenue — <em class="serif-em">3 questions, et la journée se cale</em></h2>
+        <span class="quiz-steps" id="quiz-steps" aria-hidden="true"></span>
+      </div>
+      <div class="quiz-step" id="q1" data-step="1">
+        <p class="muted small panel-lead">Ta classe (au lycée pour l'instant) :</p>
+        <div class="quiz-choix" id="quiz-niveau" role="radiogroup" aria-label="Ta classe"></div>
+      </div>
+      <div class="quiz-step" id="q2" data-step="2" hidden>
+        <p class="muted small panel-lead" id="q2-lead">Tes spécialités :</p>
+        <div class="quiz-spes" id="quiz-spes"></div>
+        <p class="quiz-msg small" id="spes-msg" role="status"></p>
+      </div>
+      <div class="quiz-step" id="q3" data-step="3" hidden>
+        <p class="muted small panel-lead">Tes horaires un jour de lycée :</p>
+        <div class="quiz-horaires">
+          <label>Lever <input type="time" id="q-wake" value="06:45"></label>
+          <label>Coucher <input type="time" id="q-bed" value="19:30"></label>
+          <label>Début des cours <input type="time" id="q-sc1" value="08:30"></label>
+          <label>Fin des cours <input type="time" id="q-sc2" value="17:00"></label>
+        </div>
+        <p class="muted small">Aucune donnée ne quitte cet appareil sans la page Sync ; tu pourras tout modifier dans les réglages.</p>
+      </div>
+      <div class="quiz-nav">
+        <button type="button" class="btn btn-ghost btn-sm" id="quiz-prev" hidden>← Retour</button>
+        <button type="button" class="btn btn-primary btn-sm" id="quiz-next" disabled>Continuer</button>
+      </div>
+    </section>
+
+    <section class="hero reveal" style="--d:.12s" id="hero">
+      <h1>Ta journée, calée sur <em class="serif-em">ta biologie.</em></h1>
+    </section>
+
+    <div class="cols reveal" style="--d:.2s" id="app" hidden>
+      <div>
+        <section class="glass panel" aria-labelledby="h-reglages">
+          <div class="panel-head">
+            <h2 id="h-reglages">Tes horaires</h2>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-quiz" title="Refaire le quiz de première ouverture (classe, spécialités, horaires)">Refaire le quiz</button>
+          </div>
+          <p class="muted small quiz-profil" id="profil-line"></p>
+          <div class="frow"><label for="wake">Lever</label><input type="time" id="wake" value="06:45"></div>
+          <div class="frow"><label for="bed">Coucher</label><input type="time" id="bed" value="19:30"></div>
+          <div class="frow"><label for="sc1">Début des cours</label><input type="time" id="sc1" value="08:30"></div>
+          <div class="frow"><label for="sc2">Fin des cours</label><input type="time" id="sc2" value="17:00"></div>
+          <p class="muted small" style="margin:2px 0 10px">Type de journée :</p>
+          <div class="seg" role="group" aria-label="Type de journée" id="dayseg">
+            <button type="button" id="seg-cours" class="segbtn">Journée de lycée</button>
+            <button type="button" id="seg-libre" class="segbtn hidden">Jour libre</button>
+          </div>
+          <p class="muted small" style="margin:12px 0 6px" id="today-line"></p>
+          <div class="wd" id="weekdays" role="group" aria-label="Jours de la semaine"></div>
+        </section>
+
+        <section class="glass panel" aria-labelledby="h-devoirs">
+          <h2 id="h-devoirs">Tes devoirs</h2>
+          <div id="tasks"></div>
+          <div class="add">
+            <input type="text" id="t-title" placeholder="Ex. Exercices dérivation…" maxlength="120">
+            <input type="number" id="t-min" min="10" max="300" step="5" value="30" title="Durée estimée en minutes">
+          </div>
+          <div class="add-row">
+            <select id="t-subject" aria-label="Matière"></select>
+            <div class="seg" role="group" aria-label="Charge du devoir" id="chargeseg">
+              <button type="button" id="seg-ex" class="segbtn">Exigeant</button>
+              <button type="button" id="seg-le" class="segbtn">Léger</button>
+            </div>
+          </div>
+          <button type="button" class="btn btn-primary btn-sm" id="btn-add-task" style="width:100%">Ajouter le devoir</button>
+        </section>
+
+        <section class="glass panel" aria-labelledby="h-notes">
+          <h2 id="h-notes">Le moteur te dit</h2>
+          <div id="notes"></div>
+        </section>
+      </div>
+
+      <div>
+        <section class="glass panel" aria-labelledby="h-plan">
+          <div class="panel-head">
+            <h2 id="h-plan">Plan de la journée</h2>
+            <span class="muted small" id="plan-kind"></span>
+          </div>
+          <div class="tl" id="tl"></div>
+        </section>
+        <footer class="footer reveal" style="--d:.3s">
+          <span>Journée — planning chronobiologique ; chaque créneau ouvert lance Révision ou Focus.</span>
+          <a href="../../index.html">Retour au launcher</a>
+        </footer>
+      </div>
+    </div>
+  </main>
+
+  <script src="../../assets/js/common.js" defer></script>
+  <script src="core.js" defer></script>
+  <script src="journee.js" defer></script>
+  <script src="../../assets/js/sync.js" defer></script>
+  <script src="sync-bridge.js" defer></script>
+</body>
+</html>
