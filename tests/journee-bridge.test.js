@@ -42,7 +42,12 @@ function appareil(serveur, options) {
       if (filePousses){ return Promise.resolve(filePousses.length ? filePousses.shift() : { ok: true, updatedMs: 5 }); }
       return Promise.resolve({ ok: true, updatedMs: 5 });
     },
-    refresh: () => { appels.refresh++; return Promise.resolve({ ok: true, userId: 'u1' }); },
+    refresh: () => {
+      appels.refresh++;
+      if (typeof options.refresh === 'function'){ return Promise.resolve(options.refresh()); }
+      if (options.refresh){ return Promise.resolve(options.refresh); }
+      return Promise.resolve({ ok: true, userId: 'u1' });
+    },
     saveMeta: () => {}
   };
   const ctx = {};
@@ -159,7 +164,7 @@ test('échec d envoi inexpliqué : renouvellement de session puis réessai réus
   A.__poll();
   await tranquille();
   await tranquille();
-  assert.equal(A.__appels.refresh, 1, 'un renouvellement doit être tenté');
+  assert.equal(A.__appels.refresh, 2, 'vérification du vide au démarrage + soin après échec');
   assert.equal(A.__appels.push, 2, 'l envoi repart une seconde fois après soin');
   const alarme = A.__appels.toasts.filter((t) => t.indexOf('Nouveaux essais') >= 0);
   assert.equal(alarme.length, 0, 'un soin réussi reste silencieux (l envoi aboutit)');
@@ -177,7 +182,7 @@ test('échec d envoi persistant : soigné puis refusé, l échec s affiche une f
   A.__poll();
   await tranquille();
   await tranquille();
-  assert.equal(A.__appels.refresh, 1);
+  assert.equal(A.__appels.refresh, 2, 'vérification du vide au démarrage + soin après échec');
   assert.equal(A.__appels.push, 2);
   const alarme = A.__appels.toasts.filter((t) => t.indexOf('Nouveaux essais') >= 0);
   assert.equal(alarme.length, 1, 'un toast unique prévient de l échec persistant');
@@ -228,4 +233,58 @@ test('réexamen sur appareil encore vide : le contenu distant est adopté', asyn
   assert.ok(B.__recharged, 'un appareil sans état local doit adopter le distant');
   const lu = JSON.parse(B.__store.get('lenancker.journee.v1'));
   assert.equal(lu.profile.niveau, 'premiere');
+});
+
+test('liste vide : la session est vérifiée avant d annoncer rien de neuf', async () => {
+  const A = appareil({ vide: true }, { badge: true });
+  await tranquille();
+  await tranquille();
+  assert.equal(A.__appels.refresh, 1, 'le « rien de neuf » doit être précédé d une vérification de session');
+  assert.equal(A.__appels.push, 0);
+  assert.ok(A.__badge.textContent.indexOf('rien de neuf') >= 0, 'badge : ' + A.__badge.textContent);
+});
+
+test('session fantôme : jeton ignoré (compte supprimé) => session expirée affichée, rien envoyé', async () => {
+  const A = appareil({ vide: true }, {
+    badge: true,
+    refresh: () => ({ ok: false, authExpired: true, error: 'Session expirée — reconnecte-toi sur la page Sync.' })
+  });
+  await tranquille();
+  await tranquille();
+  assert.ok(A.__badge.textContent.indexOf('session expirée') >= 0,
+    'le badge doit dénoncer la session morte, texte : ' + A.__badge.textContent);
+  assert.equal(A.__badge.style.borderColor, '#ff6b4a');
+  assert.equal(A.__appels.push, 0, 'aucun envoi ne doit partir sur une session morte');
+  assert.equal(A.__appels.toasts.filter((t) => t.indexOf('reconnecte') >= 0).length, 1,
+    'un unique toast invite à se reconnecter');
+});
+
+test('session fantôme avec contenu local : le soin révèle la vraie cause, sans réessai inutile', async () => {
+  const A = appareil({ vide: true }, {
+    badge: true,
+    pushes: [{ ok: false, error: 'Erreur serveur (envoi, HTTP 400).' }],
+    refresh: () => ({ ok: false, authExpired: true, error: 'Session expirée — reconnecte-toi sur la page Sync.' })
+  });
+  await tranquille(); /* adoption : vide sans contenu -> vérification refusée -> session expirée */
+  A.__store.set('lenancker.journee.v1', JSON.stringify(STATE_QUIZ));
+  A.__poll(); /* premier contenu : envoi refusé -> soin -> session expirée */
+  await tranquille();
+  await tranquille();
+  assert.equal(A.__appels.push, 1, 'pas de réessai d envoi sur une session morte');
+  assert.ok(A.__badge.textContent.indexOf('session expirée') >= 0,
+    'badge : ' + A.__badge.textContent);
+  assert.equal(A.__appels.toasts.filter((t) => t.indexOf('reconnecte') >= 0).length, 1,
+    'un seul toast, malgré les deux chemins ayant détecté la panne');
+});
+
+test('vérification de session injoignable : le rien de neuf normal est maintenu', async () => {
+  const A = appareil({ vide: true }, {
+    badge: true,
+    refresh: () => Promise.reject(new Error('réseau en berne'))
+  });
+  await tranquille();
+  await tranquille();
+  assert.ok(A.__badge.textContent.indexOf('rien de neuf') >= 0,
+    'une vérification indécise ne doit pas crier au loup, badge : ' + A.__badge.textContent);
+  assert.equal(A.__appels.push, 0);
 });
