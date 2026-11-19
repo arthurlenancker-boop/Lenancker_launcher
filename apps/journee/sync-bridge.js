@@ -18,8 +18,11 @@
    l'état (envoyé, à jour, hors ligne, échec, session expirée) et tout
    échec d'envoi retente automatiquement ; un jeton ou un identifiant de
    compte périmés sont réparés par un renouvellement de session puis un
-   nouvel essai. Hors ligne ou non connecté : l'app fonctionne en local
-   comme avant. */
+   nouvel essai. Une liste vide n'annonce « rien de neuf » qu'après
+   vérification de la session : PocketBase répond par une liste vide
+   (sans erreur) aux jetons qu'il n'accepte plus, notamment ceux d'un
+   compte supprimé ou recréé. Hors ligne ou non connecté : l'app
+   fonctionne en local comme avant. */
 (function(){
 'use strict';
 
@@ -129,7 +132,10 @@ function envoi(ms){
        potentiellement périmés — renouveler la session puis réessayer
        une fois (la config stockée est mise à jour par refresh). */
     healed = true;
-    return api.refresh().then(function(){ return pushEtat(ms); });
+    return api.refresh().then(function(r){
+      if(r && (r.authExpired || r.missingCollection)){ return r; }
+      return pushEtat(ms);
+    });
   });
 }
 function envoyer(v, premiereFois, ms){
@@ -161,6 +167,24 @@ function envoyer(v, premiereFois, ms){
   });
 }
 
+/* Une liste vide n'est pas une preuve de « rien de neuf » : PocketBase
+   répond 200 + liste vide à un jeton qu'il n'accepte plus (compte
+   supprimé ou recréé). Avant d'annoncer « rien de neuf », la session
+   est vérifiée par un renouvellement (auth-refresh), qui au passage
+   prolonge le jeton ; une vérification indécise (serveur momentanément
+   injoignable) maintient l'annonce normale. Un refus authentique
+   affiche « session expirée » (badge + toast unique). */
+function verifierRienDeNeuf(){
+  var annonce = function(){ statut('Sync : en ligne, rien de neuf', 'off'); solder(); };
+  if(typeof api.refresh !== 'function'){ annonce(); return; }
+  api.refresh().then(function(r){
+    if(!r || r.ok || (!r.authExpired && !r.missingCollection)){ annonce(); return; }
+    fail(r);
+    solder();
+  }, annonce);
+  return;
+}
+
 /* Adoption d'un état distant plus frais : remplace l'état local et
    recharge la page une fois. */
 function appliquerDistant(remoteState, remoteMs, updatedMs){
@@ -179,16 +203,17 @@ function reconcilier(res, demarrage){
   if(!res.ok){ fail(res); solder(); return; }
   if(res.empty){
     /* Serveur vide : si l'appareil possède un état (quiz et devoirs
-       saisis), c'est lui qui ouvre la synchronisation. */
+       saisis), c'est lui qui ouvre la synchronisation (un éventuel
+       échec d'envoi reste visible et auto-réparé). */
     if(hasContent(parseOr(stateRaw()))){
       var ms = Date.now();
       storage.set(LS_STAMP, String(ms));
       lastSeen = baseline = stateRaw();
       envoyer(lastSeen, true, ms);
-    }else{
-      statut('Sync : en ligne, rien de neuf', 'off');
+      solder();
+      return;
     }
-    solder();
+    verifierRienDeNeuf();
     return;
   }
   var env = parseOr(res.value);
