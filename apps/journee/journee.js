@@ -207,12 +207,15 @@ function renderTL(plan) {
   const doneDay = (state.done[dk] || {});
   plan.slots.forEach((s) => {
     const k = KIND[s.kind] || KIND.repos;
+    const fam = KIND[s.kind] ? s.kind : 'repos';
     const row = document.createElement('div');
-    row.className = 'slot' + (doneDay[s.id] ? ' sorted' : '');
+    row.className = 'slot fam-' + fam + (doneDay[s.id] ? ' sorted' : '');
     const time = s.to > s.from ? Core.fmtRange(s.from, s.to) : '';
     const when = document.createElement('span');
     when.className = 'when';
-    when.textContent = Core.fmtHM(s.id === 'coucher' ? s.from : s.from);
+    const durMin = s.to > s.from ? Math.round(s.to - s.from) : 0;
+    when.innerHTML = Core.fmtHM(s.from) +
+      (durMin ? '<span class="dur">' + Core.fmtDur(durMin) + '</span>' : '');
     const card = document.createElement('div');
     card.className = 'card';
     card.innerHTML =
@@ -242,7 +245,7 @@ function renderTL(plan) {
     if (s.kind !== 'repos') {
       const lab = document.createElement('label');
       lab.className = 'chk-slot';
-      lab.innerHTML = '<input type="checkbox"> fait';
+      lab.innerHTML = '<input type="checkbox"><span class="lbl">Fait</span>';
       const cb = lab.querySelector('input');
       cb.checked = !!doneDay[s.id];
       cb.addEventListener('change', () => {
