@@ -1,7 +1,7 @@
 /* Service worker du Lenancker Launcher.
    Stratégie : cache-first pour les assets statiques (le launcher doit
    rester utilisable hors-ligne), réseau direct pour l'API Mistral. */
-const VERSION = 'lenancker-v51';
+const VERSION = 'lenancker-v52';
 const CORE = [
   './',
   'index.html',
@@ -59,6 +59,11 @@ const CORE = [
   'apps/ocr/md2docx.js',
   'apps/ocr/md2odt.js',
   'apps/ocr/pdfocr.js',
+  'apps/signes/',
+  'apps/signes/index.html',
+  'apps/signes/signes.css',
+  'apps/signes/core.js',
+  'apps/signes/signes.js',
   'apps/focus/index.html',
   'apps/focus/focus.css',
   'apps/focus/core.js',

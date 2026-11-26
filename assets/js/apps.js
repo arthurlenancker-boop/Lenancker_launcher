@@ -30,6 +30,17 @@ window.LENANCKER_APPS = [
   },
 
   {
+    slug: 'signes',
+    name: 'Tableau de signes',
+    desc: "Le tableau de signes d'une fonction calculé pour toi : écris f(x) factorisée ((2x-1)(x+3)/(x-2)) ou développée (x²-3x+2), une ligne par facteur, la fonction en dernière ligne. Là où la fonction s'annule, un 0 est posé sur la barre verticale qui le coupe en son milieu ; dénominateur nul, double barre de valeur interdite. Racines exactes en fractions (1/2) ou arrondies (≈ 1,41), calculs exacts (rationnels BigInt), export PNG (≈ 300 dpi) et SVG.",
+    icon: 'signes',
+    galaxyIcon: 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22256%22%20height%3D%22256%22%20viewBox%3D%220%200%20256%20256%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22b%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%2393e8d8%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%234ba898%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%22256%22%20height%3D%22256%22%20rx%3D%2252%22%20fill%3D%22url%28%23b%29%22%2F%3E%3Crect%20x%3D%221.5%22%20y%3D%221.5%22%20width%3D%22253%22%20height%3D%22253%22%20rx%3D%2250.5%22%20fill%3D%22none%22%20stroke%3D%22rgba%2815%2C14%2C11%2C.28%29%22%20stroke-width%3D%223%22%2F%3E%3Cg%20transform%3D%22translate%2840%2040%29%20scale%287.3333%29%22%20fill%3D%22none%22%20stroke%3D%22%230f0e0b%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%223%22%20y%3D%224%22%20width%3D%2218%22%20height%3D%2216%22%20rx%3D%221.5%22%2F%3E%3Cpath%20d%3D%22M9%204v16%22%2F%3E%3Cpath%20d%3D%22M3%209.5h18%22%2F%3E%3Cellipse%20cx%3D%229%22%20cy%3D%226.75%22%20rx%3D%221.3%22%20ry%3D%221.7%22%2F%3E%3Cpath%20d%3D%22M14%2012.6h3%22%2F%3E%3Cpath%20d%3D%22M15.5%2011.1v3%22%2F%3E%3Cpath%20d%3D%22M4.6%2015.6h3.8%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E',
+    tint: 'rgba(98, 214, 194, 0.12)',
+    accent: '#62d6c2',
+    status: 'disponible',
+    href: 'apps/signes/index.html',
+  },
+  {
     slug: 'focus',
     name: 'Focus',
     desc: "Sessions de concentration calibrées TDA/H & TSA d'après la littérature scientifique : mode Flux (pause quand le flow casse, jamais d'horloge imposée), temps toujours visible, bruit blanc/rose/marron, pauses actives, body doubling local, plan « si-alors » et récompense liée à ton centre d'intérêt.",
