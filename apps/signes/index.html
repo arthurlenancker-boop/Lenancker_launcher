@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Tableau de signes — Lenancker Launcher</title>
+  <meta name="description" content="Le tableau de signes d'une fonction f(x) calculé pour toi : une ligne par facteur, un 0 coupé en son milieu par la barre verticale là où la fonction s'annule, double barre pour les valeurs interdites, racines exactes en fractions. Export PNG/SVG.">
+  <meta name="theme-color" content="#0f0e0b">
+  <link rel="icon" type="image/svg+xml" href="../../assets/icons/favicon.svg">
+  <link rel="apple-touch-icon" href="../../assets/icons/apple-touch-icon.png">
+  <link rel="manifest" href="../../manifest.webmanifest">
+  <link rel="stylesheet" href="../../assets/css/design.css">
+  <link rel="stylesheet" href="signes.css">
+</head>
+<body>
+  <div class="bg" aria-hidden="true">
+    <div class="bg-grid"></div>
+    <div class="bg-glow"></div>
+    <div class="bg-grain"></div>
+  </div>
+
+  <main class="shell">
+    <header class="topbar reveal" style="--d:.05s">
+      <a class="brand" href="../../index.html">
+        <span class="brand-logo" aria-hidden="true" id="brand-logo"></span>
+        <span class="brand-name">Tableau de signes<em>lenancker launcher</em></span>
+      </a>
+      <a class="btn btn-ghost btn-sm" href="../../index.html">← Launcher</a>
+    </header>
+
+    <section class="glass panel reveal" style="--d:.15s" id="workbench" aria-labelledby="h-signes">
+      <div class="panel-head">
+        <h2 id="h-signes">Le tableau de signes <em class="serif-em">calculé pour toi</em></h2>
+      </div>
+      <p class="muted small panel-lead">
+        Écris la fonction factorisée pour une ligne par facteur, ex. (x-1)(x+2)/(x-3) ;
+        les sommes, produits, quotients et puissances entières sont acceptés, ainsi que x², 2x, 0,5…
+      </p>
+
+      <div class="bench">
+        <div id="panel" aria-label="Saisie de la fonction">
+          <div class="fxcard card">
+            <div class="fxrow">
+              <span class="fxlabel">f(x) =</span>
+              <input id="fx" type="text" spellcheck="false" autocomplete="off"
+                     placeholder="(2x-1)(x+3)/(x-2)" aria-label="Expression de la fonction f">
+              <button type="button" class="btn btn-primary btn-sm" id="btnGo">Tracer</button>
+            </div>
+            <div class="exrow" id="exRow">
+              <span class="tlabel">Exemples</span>
+              <button type="button" class="chip">x²-3x+2</button>
+              <button type="button" class="chip">(2x-1)(x+3)/(x-2)</button>
+              <button type="button" class="chip">(x-1)²(x+2)</button>
+              <button type="button" class="chip">-x²+5x-6</button>
+              <button type="button" class="chip">(x+3)/(x(x-1))</button>
+              <button type="button" class="chip">1/(x-1)+2</button>
+            </div>
+            <p class="err" id="err" hidden></p>
+          </div>
+
+          <div class="howto card">
+            <p class="cardtitle">Lecture du tableau</p>
+            <ol>
+              <li><strong>0 coupé par la barre</strong> : la fonction (ou le facteur de la ligne)
+                  s'annule en cette valeur ; la barre verticale passe au milieu du 0.</li>
+              <li><strong>Double barre verticale</strong> : valeur interdite, le dénominateur
+                  s'annule — la fonction n'est pas définie.</li>
+              <li>Les racines exactes s'affichent en fractions (ex. 1/2), les autres
+                  arrondies (ex. ≈ 1,41) ; le calcul des signes est exact.</li>
+            </ol>
+          </div>
+        </div>
+
+        <div id="stage">
+          <div id="toolbar">
+            <div class="texport">
+              <button type="button" id="btnPNG" class="btn btn-sm" title="Image PNG haute définition (≈ 300 dpi)">Exporter PNG</button>
+              <button type="button" id="btnSVG" class="btn btn-sm" title="Fichier vectoriel SVG">Exporter SVG</button>
+              <button type="button" id="btnCopy" class="btn btn-sm" title="Copie l'image du tableau dans le presse-papiers">Copier l'image</button>
+            </div>
+          </div>
+
+          <div id="canvasWrap">
+            <div id="canvasInner">
+              <svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg>
+            </div>
+          </div>
+
+          <p class="hint">
+            Tout est calculé hors ligne dans ce navigateur : rien n'est envoyé, ta dernière
+            saisie reste simplement mémorisée ici. Exports PNG (≈ 300 dpi) et SVG pour tes copies
+            et fiches de révision.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer reveal" style="--d:.3s">
+      <span>Tableau de signes — analyse exacte (rationnels BigInt), 0 coupé sur la barre, double barre d'interdiction.</span>
+      <a href="../../index.html">Retour au launcher</a>
+    </footer>
+  </main>
+
+  <script src="../../assets/js/common.js" defer></script>
+  <script src="core.js" defer></script>
+  <script src="signes.js" defer></script>
+</body>
+</html>
